@@ -1,0 +1,237 @@
+:root {
+  --bg: #111316;
+  --panel: #1a1d22;
+  --muted: #9aa3ad;
+  --text: #e9eef5;
+  --accent: #7aa2ff;
+  --card: #21262d;
+  --card-hover: #2a313a;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  padding: 16px;
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
+    "Inter", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* Khung chung */
+.shell {
+  max-height: 100%;
+  width: 100%;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 14px;
+  overflow: hidden;
+}
+
+/* Header */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.title {
+  font-size: 20px;
+  font-weight: 700;
+}
+.actions button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 10px;
+  margin-left: 8px;
+  background: #2a2f36;
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s ease, transform 0.05s ease;
+  min-width: 68px;
+  text-align: center;
+}
+.actions button:hover {
+  background: #353b44;
+}
+.actions button:active {
+  transform: translateY(1px);
+}
+
+.meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.title .logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.calendar {
+  max-height: 600px;
+  flex: 1;
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.calendar::-webkit-scrollbar {
+  display: none;
+}
+
+.day-col {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  background: transparent;
+}
+.day-h {
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  background: #232933;
+  border-radius: var(--radius-md);
+  padding: 8px;
+  margin-bottom: 8px;
+}
+.day-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding-right: 2px;
+}
+.day-body::-webkit-scrollbar {
+  display: none;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: background 0.15s ease;
+}
+.card:hover {
+  background: var(--card-hover);
+  transform: translateY(-1px);
+}
+
+.subject {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.line {
+  font-size: 14px;
+  color: #cfd6df;
+  margin-top: 2px;
+}
+
+.line.period {
+  font-weight: 700;
+  color: #ffd369;
+}
+
+.line.room {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
+.line.teacher {
+  color: #9fb1c6;
+}
+
+.label {
+  color: #9fb1c6;
+  font-weight: 600;
+}
+.sep {
+  margin: 0 6px;
+  color: #5b6570;
+}
+.time,
+.session {
+  font-weight: 600;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 6px;
+  margin-left: 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tag.lythuyet {
+  color: #3b82f6;
+  font-size: 14px;
+  font-weight: bold;
+}
+.tag.thuchanh {
+  color: #22c55e;
+  font-size: 14px;
+  font-weight: bold;
+}
+.tag.online {
+  color: #f59e0b;
+  font-size: 14px;
+  font-weight: bold;
+}
+.tag.thi {
+  color: #ef4444;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.toast {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  background: #333;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  z-index: 9999;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
