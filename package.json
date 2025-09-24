@@ -36,6 +36,7 @@
   "build": {
     "appId": "com.hoaug.uneti.schedule",
     "productName": "Widget lịch học UNETI",
+    "artifactName": "uneti-schedule-widget-${version}-setup.${ext}",
     "directories": {
       "output": "dist"
     },
