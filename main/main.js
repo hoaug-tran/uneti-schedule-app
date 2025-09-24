@@ -5,16 +5,22 @@ import {
   nativeImage,
   ipcMain,
   globalShortcut,
+  Menu,
 } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getSchedule } from "../app/fetcher/getSchedule.js";
 import { showLoginWindow } from "../app/fetcher/loginWindow.js";
+import AutoLaunch from "auto-launch";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let tray, win, refreshTimer;
+const autoLauncher = new AutoLaunch({
+  name: "UNETI Schedule Widget",
+  path: process.execPath,
+});
 
 async function ensureScheduleReady() {
   try {
@@ -22,21 +28,12 @@ async function ensureScheduleReady() {
     const data = await getSchedule();
     win?.webContents.send("status", "Lịch đã sẵn sàng");
     return data;
-  } catch (err) {
-    console.warn("Lỗi tải lịch:", err.message);
+  } catch {
     win?.webContents.send("status", "Vui lòng đăng nhập UNETI...");
-
-    try {
-      await showLoginWindow(win);
-      win?.webContents.send("status", "Đăng nhập thành công, tải lại lịch...");
-      const data = await getSchedule();
-      win?.webContents.send("status", "Lịch đã sẵn sàng");
-      return data;
-    } catch (loginErr) {
-      console.error("Lỗi khi đăng nhập:", loginErr.message);
-      win?.webContents.send("status", "Đăng nhập thất bại. Vui lòng thử lại.");
-      throw loginErr;
-    }
+    await showLoginWindow(win);
+    const data = await getSchedule();
+    win?.webContents.send("status", "Lịch đã sẵn sàng");
+    return data;
   }
 }
 
@@ -56,7 +53,6 @@ function createWindow() {
       preload: path.resolve(__dirname, "preload.cjs"),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
     },
   });
 
@@ -68,9 +64,7 @@ function createWindow() {
   });
 
   win.on("closed", () => (win = null));
-  win.on("blur", () => {
-    if (win && !win.isDestroyed()) win.hide();
-  });
+  win.on("blur", () => win?.hide());
 
   return win;
 }
@@ -82,12 +76,11 @@ function showWindow() {
   const height = win.getBounds().height;
   const x = Math.max(0, pos.x - width + 20);
   const y = Math.max(0, pos.y - height - 10);
-
   win.setBounds({ x, y, width, height });
   win.showInactive();
 }
 
-function createTray() {
+async function createTray() {
   const iconPath = path.join(__dirname, "../app/assets/uneti.ico");
   let image = nativeImage.createFromPath(iconPath);
   if (image.isEmpty()) image = nativeImage.createEmpty();
@@ -99,26 +92,38 @@ function createTray() {
     if (!win || win.isDestroyed()) return;
     win.isVisible() ? win.hide() : showWindow();
   });
+
+  const enabled = await autoLauncher.isEnabled();
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Khởi động cùng Windows",
+      type: "checkbox",
+      checked: enabled,
+      click: async (menuItem) => {
+        if (menuItem.checked) await autoLauncher.enable();
+        else await autoLauncher.disable();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Thoát",
+      click: () => app.quit(),
+    },
+  ]);
+  tray.setContextMenu(contextMenu);
 }
 
-ipcMain.handle("widget:hide", () => win?.hide());
-ipcMain.handle("widget:quit", () => {
-  win?.hide();
-  app.quit();
-});
 ipcMain.handle("widget:refresh", async () => {
   await ensureScheduleReady().catch(() => {});
   win?.webContents.send("reload");
 });
-ipcMain.handle("get-userData-path", () => app.getPath("userData"));
 
 app.whenReady().then(async () => {
-  createTray();
+  await createTray();
 
   try {
     await ensureScheduleReady();
     createWindow();
-    win?.webContents.send("reload");
   } catch {
     createWindow();
   }
@@ -133,11 +138,11 @@ app.whenReady().then(async () => {
   }, 12 * 60 * 60 * 1000);
 
   globalShortcut.register("Esc", () => {
-    if (win && win.isVisible()) win.hide();
+    if (win?.isVisible()) win.hide();
   });
 });
 
-app.on("will-quit", () => {
+app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   if (refreshTimer) clearInterval(refreshTimer);
 });

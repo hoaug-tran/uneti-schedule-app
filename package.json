@@ -17,6 +17,7 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
+    "auto-launch": "^5.0.6",
     "cheerio": "^1.0.0-rc.12",
     "css-select": "^6.0.0",
     "dom-serializer": "^2.0.0",
