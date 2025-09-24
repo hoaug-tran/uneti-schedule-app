@@ -1,0 +1,67 @@
+{
+  "name": "uneti-schedule-widget",
+  "version": "1.0.0",
+  "description": "Widget lịch học UNETI",
+  "author": "Trần Kính Hoàng (hoaug)",
+  "type": "module",
+  "main": "main/main.js",
+  "scripts": {
+    "login": "node app/fetcher/loginAndSaveCookies.js",
+    "fetch": "node app/fetcher/getSchedule.js",
+    "dev": "electron main/main.js",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "depcheck": "^1.4.7",
+    "electron": "^38.1.2",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "css-select": "^6.0.0",
+    "dom-serializer": "^2.0.0",
+    "domhandler": "^5.0.3",
+    "domutils": "^3.2.2",
+    "encoding-sniffer": "^0.2.1",
+    "entities": "^7.0.0",
+    "htmlparser2": "^10.0.0",
+    "nth-check": "^2.1.1",
+    "parse5-htmlparser2-tree-adapter": "^8.0.0",
+    "parse5-parser-stream": "^8.0.0",
+    "playwright": "^1.48.0",
+    "undici": "^7.16.0",
+    "whatwg-encoding": "^3.1.1"
+  },
+  "build": {
+    "appId": "com.hoaug.uneti.schedule",
+    "productName": "Widget lịch học UNETI",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main/**/*",
+      "app/**/*",
+      "preload.cjs",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/htmlparser2/**"
+    ],
+    "extraResources": [
+      {
+        "from": "app/assets/",
+        "to": "assets"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "app/assets/uneti.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
