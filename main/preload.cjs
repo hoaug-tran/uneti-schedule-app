@@ -12,8 +12,10 @@ contextBridge.exposeInMainWorld("scheduleAPI", {
     try {
       const scheduleFile = await getScheduleFile();
       if (!fs.existsSync(scheduleFile)) return null;
-      return JSON.parse(fs.readFileSync(scheduleFile, "utf8"));
-    } catch {
+      const raw = fs.readFileSync(scheduleFile, "utf8");
+      return JSON.parse(raw);
+    } catch (err) {
+      console.error("[scheduleAPI.load] error:", err);
       return null;
     }
   },
@@ -24,4 +26,8 @@ contextBridge.exposeInMainWorld("widgetAPI", {
   hide: () => ipcRenderer.invoke("widget:hide"),
   quit: () => ipcRenderer.invoke("widget:quit"),
   refresh: () => ipcRenderer.invoke("widget:refresh"),
+});
+
+contextBridge.exposeInMainWorld("statusAPI", {
+  onStatus: (cb) => ipcRenderer.on("status", (_, msg) => cb(msg)),
 });

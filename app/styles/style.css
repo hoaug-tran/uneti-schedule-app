@@ -235,3 +235,10 @@ body {
   opacity: 1;
   transform: translateY(0);
 }
+
+#status {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #bbb;
+  font-family: sans-serif;
+}

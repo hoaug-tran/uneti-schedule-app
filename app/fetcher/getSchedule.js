@@ -1,12 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
 import * as cheerio from "cheerio";
-import { app } from "electron";
+import { getPaths } from "./storePath.js";
 
-const storeDir = path.join(app.getPath("userData"), "store");
-const COOKIE_TXT = path.join(storeDir, "cookies.txt");
-const OUT_JSON = path.join(storeDir, "schedule.json");
-const RAW_HTML = path.join(storeDir, "fragment.html");
+const { COOKIE_TXT, OUT_JSON, RAW_HTML } = getPaths();
 
 function ddmmyyyy(d) {
   const dd = String(d.getDate()).padStart(2, "0");
@@ -93,29 +90,21 @@ function parseScheduleFromFragment(html) {
   return result;
 }
 
-async function getSchedule(weekDateArg) {
+export async function getSchedule(weekDateArg) {
   const cookies = await fs.readFile(COOKIE_TXT, "utf8").catch(() => "");
-  if (!cookies) throw new Error("Chưa có cookies. Chạy: pnpm login");
+  if (!cookies) throw new Error("Cookies not found, run login");
 
   const weekDate = weekDateArg || ddmmyyyy(startOfWeek(new Date()));
   const res = await fetch(
     "https://sinhvien.uneti.edu.vn/SinhVien/GetDanhSachLichTheoTuan",
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: cookies,
-      },
+      headers: { "Content-Type": "application/json", Cookie: cookies },
       body: JSON.stringify({ param: { firstDate: weekDate } }),
     }
   );
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(
-      `HTTP ${res.status} – có thể cookie hết hạn.\n${text.slice(0, 500)}`
-    );
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status} – cookie có thể hết hạn`);
 
   const html = await res.text();
   await fs.mkdir(path.dirname(OUT_JSON), { recursive: true });
@@ -138,5 +127,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 }
-
-export { getSchedule };

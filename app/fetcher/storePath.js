@@ -8,6 +8,7 @@ function getStoreDir() {
 function getPaths() {
   const storeDir = getStoreDir();
   return {
+    STORE_DIR: storeDir,
     COOKIE_TXT: path.join(storeDir, "cookies.txt"),
     OUT_JSON: path.join(storeDir, "schedule.json"),
     RAW_HTML: path.join(storeDir, "fragment.html"),
