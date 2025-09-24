@@ -1,4 +1,4 @@
-name: Build & Release Uneti Schedule App Widget
+name: Build & Release UNETI Schedule Widget
 
 on:
   push:
@@ -37,34 +37,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set tag name
+        id: vars
+        run: echo "TAG_NAME=v1.0.${{ github.run_number }}" >> $GITHUB_ENV
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: uneti-schedule-widget
           path: ./dist
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          release_name: Uneti Schedule App Widget ${{ github.ref_name || format('v1.0.{0}', github.run_number) }}
-          draft: false
-          prerelease: false
-
       - name: Zip artifact
         run: |
           cd dist
-          zip -r ../uneti-schedule-widget.zip .
+          zip -r ../uneti-schedule-widget-${{ env.TAG_NAME }}.zip .
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: "Widget lịch học UNETI ${{ env.TAG_NAME }}"
+          files: ./uneti-schedule-widget-${{ env.TAG_NAME }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./uneti-schedule-widget.zip
-          asset_name: uneti-schedule-widget-${{ steps.create_release.outputs.tag_name }}.zip
-          asset_content_type: application/zip
