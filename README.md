@@ -1,13 +1,10 @@
 # UNETI Schedule Widget
 
-Ứng dụng widget desktop để xem lịch học theo tuần từ  
-**Trường Đại học Kinh tế – Kỹ thuật Công nghiệp (UNETI)**.
+Ứng dụng widget desktop để xem lịch học theo tuần từ **Trường Đại học Kinh tế – Kỹ thuật Công nghiệp (UNETI)**.
 
-Ứng dụng tích hợp trực tiếp với cổng thông tin sinh viên UNETI (`https://sinhvien.uneti.edu.vn`),  
-cho phép sinh viên đăng nhập và lấy thời khóa biểu chính thức.
+Ứng dụng tích hợp trực tiếp với cổng thông tin sinh viên UNETI (`https://sinhvien.uneti.edu.vn`), cho phép sinh viên đăng nhập và lấy thời khóa biểu chính thức.
 
-Lưu ý: Ứng dụng này chỉ dành cho **sinh viên UNETI**.  
-Bạn cần có tài khoản sinh viên hợp lệ để sử dụng.
+Lưu ý: Ứng dụng này chỉ dành cho **sinh viên UNETI**. Bạn cần có tài khoản sinh viên hợp lệ để sử dụng.
 
 ---
 
@@ -82,7 +79,7 @@ schedule.json và cookies.txt sẽ được lưu tại %APPDATA%/uneti-schedule-
 - Windows 10/11 (đã kiểm thử).
 - Các nền tảng khác có thể chạy nhưng chưa được hỗ trợ chính thức.
 
-### 8. Ghi chú
+### 8. Lưu ý !!!
 
 - Đây là công cụ không chính thức, chỉ nhằm hỗ trợ sinh viên UNETI xem lịch học tiện lợi hơn.
 - Ứng dụng không phải sản phẩm chính thức của UNETI.
