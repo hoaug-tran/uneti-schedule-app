@@ -1,4 +1,4 @@
-name: Build & Release Electron App
+name: Build & Release Uneti Schedule App Widget
 
 on:
   push:
@@ -50,7 +50,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           tag_name: v1.0.${{ github.run_number }}
-          release_name: Release v1.0.${{ github.run_number }}
+          release_name: Uneti Schedule App Widget ${{ github.ref_name || format('v1.0.{0}', github.run_number) }}
           draft: false
           prerelease: false
 
