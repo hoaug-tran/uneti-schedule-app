@@ -37,9 +37,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set tag name
-        id: vars
-        run: echo "TAG_NAME=v1.0.${{ github.run_number }}" >> $GITHUB_ENV
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "PKG_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using version: $VERSION"
 
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -47,16 +53,18 @@ jobs:
           name: uneti-schedule-widget
           path: ./dist
 
-      - name: Zip artifact
+      - name: Find installer exe
+        id: find_exe
         run: |
-          cd dist
-          zip -r ../uneti-schedule-widget-${{ env.TAG_NAME }}.zip .
+          FILE=$(ls dist/*.exe | head -n 1)
+          echo "INSTALLER=$FILE" >> $GITHUB_ENV
+          echo "Found installer: $FILE"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: "Widget lịch học UNETI ${{ env.TAG_NAME }}"
-          files: ./uneti-schedule-widget-${{ env.TAG_NAME }}.zip
+          tag_name: v${{ env.PKG_VERSION }}
+          name: "Widget lịch học UNETI v${{ env.PKG_VERSION }}"
+          files: ${{ env.INSTALLER }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
