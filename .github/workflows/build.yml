@@ -57,7 +57,7 @@ jobs:
         id: find_files
         run: |
           EXE=$(ls dist/*.exe | head -n 1)
-          YAML=$(ls dist/*.yml | head -n 1)
+          YAML=$(ls dist/latest.yml)
           echo "INSTALLER=$EXE" >> $GITHUB_ENV
           echo "YML=$YAML" >> $GITHUB_ENV
           echo "Found installer: $EXE"
