@@ -189,40 +189,6 @@ async function createTray() {
       },
     },
     { type: "separator" },
-    {
-      label: "Kiểm tra cập nhật",
-      click: async () => {
-        try {
-          if (!win || win.isDestroyed()) {
-            createWindow();
-          } else {
-            win.show();
-            win.focus();
-          }
-
-          const res = await autoUpdater.checkForUpdates();
-          const newVersion = res?.updateInfo?.version;
-          const current = app.getVersion();
-
-          if (newVersion && newVersion !== current) {
-            sendToRenderer(
-              "toast-update",
-              `Có bản cập nhật mới (v${newVersion}).`
-            );
-          } else {
-            sendToRenderer(
-              "toast",
-              `Bạn đang dùng phiên bản mới nhất (v${current}).`
-            );
-          }
-        } catch (e) {
-          sendToRenderer(
-            "toast",
-            "Lỗi kiểm tra cập nhật: " + (e?.message ?? e)
-          );
-        }
-      },
-    },
     { type: "separator" },
     { label: "Thoát", click: () => app.quit() },
   ]);
