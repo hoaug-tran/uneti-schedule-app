@@ -66,26 +66,82 @@ async function render() {
   try {
     const payload = await window.scheduleAPI?.load?.();
 
+    let metaHtml = "";
+    let bodyHtml = "";
+
     if (!payload) {
-      el.innerHTML = `<div class="empty">Chưa có dữ liệu lịch. Hãy kiểm tra mạng hoặc thử đăng nhập lại.</div>`;
-      return;
+      metaHtml = "Chưa có dữ liệu";
+      bodyHtml = `<div class="empty">Chưa có dữ liệu lịch. Hãy kiểm tra mạng hoặc thử đăng nhập lại.</div>`;
+    } else {
+      const { updatedAt, data } = payload;
+      const grouped = byDay(data);
+      const days = Object.keys(grouped).sort();
+
+      metaHtml = `Cập nhật: ${new Date(updatedAt).toLocaleString(
+        "vi-VN"
+      )}<br/>`;
+
+      if (days.length === 0) {
+        bodyHtml = `<div class="empty">Không có lịch học trong tuần này.</div>`;
+      } else {
+        const firstDay = new Date(days[0]);
+        const lastDay = new Date(days[days.length - 1]);
+        const rangeText = `${firstDay.toLocaleDateString(
+          "vi-VN"
+        )} → ${lastDay.toLocaleDateString("vi-VN")}`;
+
+        metaHtml += `Tuần: ${rangeText}`;
+
+        bodyHtml = `
+          <div class="calendar" id="cal">
+            ${days
+              .map(
+                (d) => `
+              <section class="day-col">
+                <header class="day-h">
+                  ${new Date(d).toLocaleDateString("vi-VN", {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "2-digit",
+                  })}
+                </header>
+                <div class="day-body">
+                  ${grouped[d]
+                    .map(
+                      (s) => `
+                    <article class="card">
+                      <div class="subject">${s.subject}</div>
+                      <div class="line period">
+                        Tiết ${periodSpan(s.periods)}
+                        <span class="sep"> | </span>
+                        ${periodTime(s.periods)}
+                        <span class="sep"> | </span>
+                        ${s.session}
+                        <span class="tag ${normalizeType(s.type)}">${
+                        s.type
+                      }</span>
+                      </div>
+                      <div class="line room">${s.room ?? ""}</div>
+                      ${
+                        s.teacher
+                          ? `<div class="line teacher">GV ${s.teacher}</div>`
+                          : ""
+                      }
+                    </article>
+                  `
+                    )
+                    .join("")}
+                </div>
+              </section>
+            `
+              )
+              .join("")}
+          </div>
+        `;
+      }
     }
 
-    const { updatedAt, data } = payload;
-    const grouped = byDay(data);
-    const days = Object.keys(grouped).sort();
-
-    if (days.length === 0) {
-      el.innerHTML = `<div class="empty">Không có lịch học trong tuần này.</div>`;
-      return;
-    }
-
-    const firstDay = new Date(days[0]);
-    const lastDay = new Date(days[days.length - 1]);
-    const rangeText = `${firstDay.toLocaleDateString(
-      "vi-VN"
-    )} → ${lastDay.toLocaleDateString("vi-VN")}`;
-
+    // render shell + meta + body
     el.innerHTML = `
       <div class="shell">
         <div class="head">
@@ -100,58 +156,12 @@ async function render() {
           </div>
         </div>
 
-        <div class="meta">
-          Cập nhật: ${new Date(updatedAt).toLocaleString("vi-VN")}<br/>
-          Tuần: ${rangeText}
-        </div>
-
-        <div class="calendar" id="cal">
-          ${days
-            .map(
-              (d) => `
-            <section class="day-col">
-              <header class="day-h">
-                ${new Date(d).toLocaleDateString("vi-VN", {
-                  weekday: "long",
-                  day: "2-digit",
-                  month: "2-digit",
-                })}
-              </header>
-              <div class="day-body">
-                ${grouped[d]
-                  .map(
-                    (s) => `
-                  <article class="card">
-                    <div class="subject">${s.subject}</div>
-                    <div class="line period">
-                      Tiết ${periodSpan(s.periods)}
-                      <span class="sep"> | </span>
-                      ${periodTime(s.periods)}
-                      <span class="sep"> | </span>
-                      ${s.session}
-                      <span class="tag ${normalizeType(s.type)}">${
-                      s.type
-                    }</span>
-                    </div>
-                    <div class="line room">${s.room ?? ""}</div>
-                    ${
-                      s.teacher
-                        ? `<div class="line teacher">GV ${s.teacher}</div>`
-                        : ""
-                    }
-                  </article>
-                `
-                  )
-                  .join("")}
-              </div>
-            </section>
-          `
-            )
-            .join("")}
-        </div>
+        <div class="meta">${metaHtml}</div>
+        <div class="body">${bodyHtml}</div>
       </div>
     `;
 
+    // gắn event
     const btnRefresh = $("#btn-refresh");
     const btnHide = $("#btn-hide");
     const btnExit = $("#btn-exit");
@@ -189,9 +199,7 @@ async function render() {
     );
 
     const statusEl = document.getElementById("status");
-    if (statusEl) {
-      statusEl.style.display = "none";
-    }
+    if (statusEl) statusEl.style.display = "none";
   } catch (e) {
     el.innerHTML = `<div class="empty">Có lỗi khi hiển thị: ${
       e?.message ?? e

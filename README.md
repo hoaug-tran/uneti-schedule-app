@@ -13,7 +13,7 @@ Lưu ý: Ứng dụng này chỉ dành cho **sinh viên UNETI**. Bạn cần có
 - Widget Electron gọn nhẹ, tích hợp vào khay hệ thống (system tray)
 - Đăng nhập trực tiếp trong ứng dụng (không cần mở trình duyệt ngoài)
 - Phân tích và hiển thị lịch học theo tuần (môn học, buổi, phòng, giảng viên)
-- Tự động làm mới mỗi 12 giờ
+- Tự động làm mới mỗi 12 giờ hoặc có thể tự làm mới
 - Lưu cookies cục bộ trong thư mục dữ liệu người dùng
 
 ---
@@ -29,11 +29,13 @@ cd uneti-schedule-widget
 
 ### 2. Cài đặt Node.JS
 
+Yêu cầu hệ thống: Node.js ≥ 20
+
 - https://nodejs.org/en/download
 
 ### 3. Cài đặt dependencies
 
-- Dự án sử dụng npm. Nếu chưa cài:
+Tiếp theo:
 
 ```bash
 npm install
@@ -45,7 +47,7 @@ npm install
 npm run dev
 ```
 
-- Ứng dụng Electron sẽ được khởi chạy trực tiếp.
+Ứng dụng Electron sẽ được khởi chạy trực tiếp.
 
 ### 5. Build file .exe (Windows)
 
@@ -53,7 +55,7 @@ npm run dev
 npm run build
 ```
 
-- File cài đặt (.exe) sẽ nằm trong thư mục dist/.
+File cài đặt (.exe) sẽ nằm trong thư mục dist/.
 
 ### Cấu trúc dự án
 
@@ -72,15 +74,14 @@ schedule.json và cookies.txt sẽ được lưu tại %APPDATA%/uneti-schedule-
 - Sau khi đăng nhập thành công, lịch học sẽ được tải và hiển thị trong widget.
 - Ứng dụng sẽ thu gọn xuống khay hệ thống.
 - Bấm vào icon khay để bật/tắt widget.
-- Yêu cầu hệ thống: Node.js ≥ 20
 
 ### 7. Test
 
-- Windows 10/11 (đã kiểm thử).
-- Các nền tảng khác có thể chạy nhưng chưa được hỗ trợ chính thức.
+- Windows 10/11 (đã test).
+- Các nền tảng khác: chưa test
 
-### 8. Lưu ý !!!
+### ⚠️ Lưu ý !!!
 
-- Đây là công cụ không chính thức, chỉ nhằm hỗ trợ sinh viên UNETI xem lịch học tiện lợi hơn.
-- Ứng dụng không phải sản phẩm chính thức của UNETI.
-- Người dùng tự chịu trách nhiệm khi sử dụng.
+- Đây là công cụ không chính thức, được phát triển với mục đích hỗ trợ sinh viên UNETI theo dõi lịch học nhanh chóng và tiện lợi hơn.
+- Ứng dụng không thuộc về **Trường Đại học Kinh tế – Kỹ thuật Công nghiệp (UNETI)**, mà là sản phẩm cá nhân do sinh viên UNETI xây dựng. Phần mềm hoàn toàn miễn phí, không thu thập hay sử dụng bất kỳ thông tin riêng tư nào của người dùng.
+- Người dùng tự chịu trách nhiệm về việc cài đặt và sử dụng ứng dụng.

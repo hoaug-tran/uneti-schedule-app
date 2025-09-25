@@ -1,5 +1,5 @@
+import { app } from "./bootstrap.js";
 import {
-  app,
   BrowserWindow,
   Tray,
   nativeImage,
@@ -20,6 +20,12 @@ let tray, win, refreshTimer;
 const autoLauncher = new AutoLaunch({
   name: "UNETI Schedule Widget",
   path: process.execPath,
+});
+
+ipcMain.handle("get-userData-path", () => {
+  const p = app.getPath("userData");
+  console.log("[ipcMain] get-userData-path:", p);
+  return p;
 });
 
 async function ensureScheduleReady() {
@@ -50,9 +56,10 @@ function createWindow() {
     skipTaskbar: true,
     roundedCorners: true,
     webPreferences: {
-      preload: path.resolve(__dirname, "preload.cjs"),
+      preload: path.join(__dirname, "preload.cjs"),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: false,
     },
   });
 
@@ -116,6 +123,16 @@ async function createTray() {
 ipcMain.handle("widget:refresh", async () => {
   await ensureScheduleReady().catch(() => {});
   win?.webContents.send("reload");
+});
+
+ipcMain.handle("widget:hide", () => {
+  if (win && !win.isDestroyed()) {
+    win.hide();
+  }
+});
+
+ipcMain.handle("widget:quit", () => {
+  app.quit();
 });
 
 app.whenReady().then(async () => {

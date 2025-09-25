@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 const fs = require("fs");
 const path = require("path");
 
+console.log("[preload] injected successfully:", __filename);
+
 async function getScheduleFile() {
   const userDataPath = await ipcRenderer.invoke("get-userData-path");
   return path.join(userDataPath, "store", "schedule.json");
@@ -19,7 +21,10 @@ contextBridge.exposeInMainWorld("scheduleAPI", {
       return null;
     }
   },
-  onReload: (cb) => ipcRenderer.on("reload", cb),
+  onReload: (cb) => {
+    console.log("[scheduleAPI] registered reload listener");
+    ipcRenderer.on("reload", () => cb());
+  },
 });
 
 contextBridge.exposeInMainWorld("widgetAPI", {

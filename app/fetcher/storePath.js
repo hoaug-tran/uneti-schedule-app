@@ -1,5 +1,5 @@
+import { app } from "../../main/bootstrap.js";
 import path from "path";
-import { app } from "electron";
 
 function getStoreDir() {
   return path.join(app.getPath("userData"), "store");

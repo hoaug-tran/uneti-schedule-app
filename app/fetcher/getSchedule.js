@@ -87,6 +87,8 @@ function parseScheduleFromFragment(html) {
       });
   });
 
+  console.log("[getSchedule] OUT_JSON =", OUT_JSON);
+
   return result;
 }
 
@@ -116,6 +118,8 @@ export async function getSchedule(weekDateArg) {
     JSON.stringify({ updatedAt: Date.now(), data }, null, 2),
     "utf8"
   );
+
+  console.log("[getSchedule] OUT_JSON =", OUT_JSON);
 
   return data;
 }
