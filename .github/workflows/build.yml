@@ -2,7 +2,7 @@ name: Build & Release UNETI Schedule Widget
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
@@ -21,12 +21,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build app
+      - name: Build app (electron-builder)
         run: npm run build
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: uneti-schedule-widget
@@ -47,24 +47,29 @@ jobs:
           echo "PKG_VERSION=$VERSION" >> $GITHUB_ENV
           echo "Using version: $VERSION"
 
-      - name: Download artifact
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: uneti-schedule-widget
           path: ./dist
 
-      - name: Find installer exe
-        id: find_exe
+      - name: Find installer and metadata
+        id: find_files
         run: |
-          FILE=$(ls dist/*.exe | head -n 1)
-          echo "INSTALLER=$FILE" >> $GITHUB_ENV
-          echo "Found installer: $FILE"
+          EXE=$(ls dist/*.exe | head -n 1)
+          YAML=$(ls dist/*.yml | head -n 1)
+          echo "INSTALLER=$EXE" >> $GITHUB_ENV
+          echo "YML=$YAML" >> $GITHUB_ENV
+          echo "Found installer: $EXE"
+          echo "Found update metadata: $YAML"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.PKG_VERSION }}
           name: "Widget lịch học UNETI v${{ env.PKG_VERSION }}"
-          files: ${{ env.INSTALLER }}
+          files: |
+            ${{ env.INSTALLER }}
+            ${{ env.YML }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
