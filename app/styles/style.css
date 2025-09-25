@@ -8,6 +8,11 @@
   --card-hover: #2a313a;
   --radius-lg: 16px;
   --radius-md: 12px;
+  --success-bg: #183226;
+  --success-bg2: #12261e;
+  --success-border: #2f8f5b;
+  --success-accent: #35c47e;
+  --success-text: #d9ffe9;
 }
 
 * {
@@ -52,6 +57,24 @@ body {
   font-size: 20px;
   font-weight: 700;
 }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.actions .left-group,
+.actions .right-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions .right-group {
+  margin-left: auto;
+}
+
 .actions button {
   appearance: none;
   border: 0;
@@ -64,7 +87,7 @@ body {
   font-size: 14px;
   font-weight: 600;
   transition: background 0.15s ease, transform 0.05s ease;
-  min-width: 68px;
+  min-width: 110px;
   text-align: center;
 }
 .actions button:hover {
@@ -241,4 +264,86 @@ body {
   font-size: 13px;
   color: #bbb;
   font-family: sans-serif;
+}
+
+.no-class {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa3ad;
+  font-size: 14px;
+  font-style: italic;
+  opacity: 0.85;
+  text-align: center;
+}
+
+.no-class .icon {
+  display: inline-block;
+  margin-left: 4px;
+  transition: transform 0.2s;
+}
+
+.day-col:hover .no-class .icon {
+  animation: wiggle 1.5s infinite ease-in-out;
+}
+
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-15deg);
+  }
+  50% {
+    transform: rotate(15deg);
+  }
+  75% {
+    transform: rotate(-8deg);
+  }
+}
+
+.toast.update {
+  background: linear-gradient(
+    90deg,
+    var(--success-bg) 0%,
+    var(--success-bg2) 100%
+  );
+  border: 1px solid var(--success-border);
+  border-left: 4px solid var(--success-accent);
+  color: var(--success-text);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  max-width: 520px;
+  line-height: 1.35;
+}
+
+.toast.update.show {
+  animation: pulse 1s ease-in-out;
+}
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(53, 196, 126, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(53, 196, 126, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(53, 196, 126, 0);
+  }
+}
+
+.toast.info {
+  background: linear-gradient(90deg, #1b2330 0%, #171e29 100%);
+  border: 1px solid #38507a;
+  border-left: 4px solid #4693ff;
+  color: #d9e7ff;
+}
+.toast.error {
+  background: linear-gradient(90deg, #2a1719 0%, #231214 100%);
+  border: 1px solid #7a3a3f;
+  border-left: 4px solid #ff4d5a;
+  color: #ffd9dc;
 }

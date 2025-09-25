@@ -19,6 +19,16 @@ function startOfWeek(date = new Date()) {
   return d;
 }
 
+function looksLikeLogin(html) {
+  const text = html.toLowerCase();
+  return (
+    text.includes("đăng nhập") ||
+    text.includes("sinh-vien-dang-nhap") ||
+    text.includes("tên đăng nhập") ||
+    text.includes("mật khẩu")
+  );
+}
+
 function parseScheduleFromFragment(html) {
   const $ = cheerio.load(html);
   const days = [];
@@ -58,8 +68,11 @@ function parseScheduleFromFragment(html) {
 
             const tiet = getText("Tiết");
             const periods = (() => {
+              if (!tiet) return undefined;
               const m = tiet.match(/(\d+)\s*-\s*(\d+)/);
-              return m ? [Number(m[1]), Number(m[2])] : undefined;
+              if (m) return [Number(m[1]), Number(m[2])];
+              const single = tiet.match(/(\d+)/);
+              return single ? [Number(single[1])] : undefined;
             })();
 
             const room = getText("Phòng");
@@ -87,8 +100,6 @@ function parseScheduleFromFragment(html) {
       });
   });
 
-  console.log("[getSchedule] OUT_JSON =", OUT_JSON);
-
   return result;
 }
 
@@ -97,22 +108,36 @@ export async function getSchedule(weekDateArg) {
   if (!cookies) throw new Error("Cookies not found, run login");
 
   const weekDate = weekDateArg || ddmmyyyy(startOfWeek(new Date()));
-  const res = await fetch(
-    "https://sinhvien.uneti.edu.vn/SinhVien/GetDanhSachLichTheoTuan",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: cookies },
-      body: JSON.stringify({ param: { firstDate: weekDate } }),
-    }
-  );
+  let res;
+  try {
+    res = await fetch(
+      "https://sinhvien.uneti.edu.vn/SinhVien/GetDanhSachLichTheoTuan",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookies },
+        body: JSON.stringify({ param: { firstDate: weekDate } }),
+      }
+    );
+  } catch (e) {
+    throw new Error("NETWORK_FAIL");
+  }
 
-  if (!res.ok) throw new Error(`HTTP ${res.status} – cookie có thể hết hạn`);
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("AUTH");
+    throw new Error(`HTTP ${res.status}`);
+  }
 
   const html = await res.text();
   await fs.mkdir(path.dirname(OUT_JSON), { recursive: true });
   await fs.writeFile(RAW_HTML, html, "utf8");
 
+  if (looksLikeLogin(html)) {
+    throw new Error("AUTH");
+  }
+
   const data = parseScheduleFromFragment(html);
+  console.log("[getSchedule] parsed records:", data.length);
+
   await fs.writeFile(
     OUT_JSON,
     JSON.stringify({ updatedAt: Date.now(), data }, null, 2),
@@ -120,7 +145,6 @@ export async function getSchedule(weekDateArg) {
   );
 
   console.log("[getSchedule] OUT_JSON =", OUT_JSON);
-
   return data;
 }
 
