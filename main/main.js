@@ -152,6 +152,18 @@ function showWindow() {
   win.showInactive();
 }
 
+function sendToRenderer(channel, msg) {
+  if (win && !win.isDestroyed()) {
+    if (win.webContents.isLoading()) {
+      win.webContents.once("did-finish-load", () => {
+        win.webContents.send(channel, msg);
+      });
+    } else {
+      win.webContents.send(channel, msg);
+    }
+  }
+}
+
 async function createTray() {
   const iconPath = path.join(__dirname, "../app/assets/uneti.ico");
   let image = nativeImage.createFromPath(iconPath);
@@ -180,16 +192,33 @@ async function createTray() {
     {
       label: "Kiểm tra cập nhật",
       click: async () => {
-        const res = await autoUpdater.checkForUpdates();
-        if (res?.updateInfo?.version) {
-          win?.webContents.send(
-            "toast-update",
-            `Có bản cập nhật mới (v${res.updateInfo.version}).`
-          );
-        } else {
-          win?.webContents.send(
+        try {
+          if (!win || win.isDestroyed()) {
+            createWindow();
+          } else {
+            win.show();
+            win.focus();
+          }
+
+          const res = await autoUpdater.checkForUpdates();
+          const newVersion = res?.updateInfo?.version;
+          const current = app.getVersion();
+
+          if (newVersion && newVersion !== current) {
+            sendToRenderer(
+              "toast-update",
+              `Có bản cập nhật mới (v${newVersion}).`
+            );
+          } else {
+            sendToRenderer(
+              "toast",
+              `Bạn đang dùng phiên bản mới nhất (v${current}).`
+            );
+          }
+        } catch (e) {
+          sendToRenderer(
             "toast",
-            `Bạn đang dùng phiên bản mới nhất (v${app.getVersion()}).`
+            "Lỗi kiểm tra cập nhật: " + (e?.message ?? e)
           );
         }
       },

@@ -218,25 +218,27 @@ async function render() {
         toast.textContent = msg;
         toast.style.cursor = "pointer";
 
-        toast.addEventListener("click", async () => {
-          const btn = document.getElementById("btn-update");
-          if (!btn) return;
-          const old = btn.textContent;
-          btn.disabled = true;
-          btn.textContent = "Đang cập nhật...";
+        if (/cập nhật/i.test(msg)) {
+          toast.addEventListener("click", async () => {
+            const btn = document.getElementById("btn-update");
+            if (!btn) return;
+            const old = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = "Đang cập nhật...";
 
-          const ok = await window.updateAPI.install();
-          if (ok) {
-            toast.textContent =
-              "Cập nhật thành công, ứng dụng sẽ khởi động lại...";
-          } else {
-            toast.textContent = "Lỗi khi cập nhật.";
-          }
+            const ok = await window.updateAPI.install();
+            if (ok) {
+              toast.textContent =
+                "Cập nhật thành công, ứng dụng sẽ khởi động lại...";
+            } else {
+              toast.textContent = "Lỗi khi cập nhật.";
+            }
 
-          setTimeout(() => toast.remove(), 4000);
-          btn.textContent = old;
-          btn.disabled = false;
-        });
+            setTimeout(() => toast.remove(), 4000);
+            btn.textContent = old;
+            btn.disabled = false;
+          });
+        }
 
         document.body.appendChild(toast);
         requestAnimationFrame(() => toast.classList.add("show"));
