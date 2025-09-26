@@ -1,6 +1,6 @@
 {
   "name": "uneti-schedule-widget",
-  "version": "1.2.3",
+  "version": "1.2.2",
   "description": "Widget lịch học UNETI",
   "author": "Trần Kính Hoàng (hoaug)",
   "type": "module",
@@ -58,7 +58,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     }
   }
 }
