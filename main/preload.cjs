@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const { weekKey } = require("../app/utils/date.js");
 
 console.log("[preload] injected successfully:", __filename);
 
@@ -9,9 +10,22 @@ async function getStoreDir() {
   return path.join(userDataPath, "store");
 }
 
-async function getScheduleFile() {
+async function getScheduleFile(isoDate) {
   const storeDir = await getStoreDir();
-  return path.join(storeDir, "schedule.json");
+  const d = isoDate ? new Date(isoDate) : new Date();
+  const key = weekKey(d);
+  return path.join(storeDir, `schedule-${key}.json`);
+}
+
+function scheduleNeedsUpdate(file, maxAgeMs = 6 * 60 * 60 * 1000) {
+  if (!fs.existsSync(file)) return true;
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!raw.updatedAt) return true;
+    return Date.now() - raw.updatedAt > maxAgeMs;
+  } catch {
+    return true;
+  }
 }
 
 async function getCookiesFile() {
@@ -20,9 +34,9 @@ async function getCookiesFile() {
 }
 
 contextBridge.exposeInMainWorld("scheduleAPI", {
-  load: async () => {
+  load: async (isoDate) => {
     try {
-      const scheduleFile = await getScheduleFile();
+      const scheduleFile = await getScheduleFile(isoDate);
       if (!fs.existsSync(scheduleFile)) return null;
       const raw = fs.readFileSync(scheduleFile, "utf8");
       return JSON.parse(raw);
@@ -31,24 +45,21 @@ contextBridge.exposeInMainWorld("scheduleAPI", {
       return null;
     }
   },
-  onReload: (cb) => {
-    console.log("[scheduleAPI] registered reload listener");
-    ipcRenderer.on("reload", () => cb());
-  },
+
   cookiesExists: async () => {
-    try {
-      const cookiesFile = await getCookiesFile();
-      return fs.existsSync(cookiesFile);
-    } catch {
-      return false;
-    }
+    const cookiesFile = await getCookiesFile();
+    return fs.existsSync(cookiesFile);
   },
+  needsUpdate: scheduleNeedsUpdate,
+  onReload: (cb) => ipcRenderer.on("reload", () => cb()),
 });
 
 contextBridge.exposeInMainWorld("widgetAPI", {
   hide: () => ipcRenderer.invoke("widget:hide"),
   quit: () => ipcRenderer.invoke("widget:quit"),
   refresh: () => ipcRenderer.invoke("widget:refresh"),
+  refreshWeek: (isoDate) => ipcRenderer.invoke("widget:refresh-week", isoDate),
+  fetchWeek: (offset) => ipcRenderer.invoke("widget:fetch-week", offset),
   login: () => ipcRenderer.invoke("widget:login"),
   onLogin: (cb) => ipcRenderer.on("login-success", cb),
 });
@@ -62,4 +73,15 @@ contextBridge.exposeInMainWorld("updateAPI", {
   install: () => ipcRenderer.invoke("app:install-update"),
   getVersion: () => ipcRenderer.invoke("app:get-version"),
   onUpdateToast: (cb) => ipcRenderer.on("toast-update", (_, msg) => cb(msg)),
+});
+
+contextBridge.exposeInMainWorld("dateAPI", {
+  weekKey: (isoDate) => {
+    const d = isoDate ? new Date(isoDate) : new Date();
+    return weekKey(d);
+  },
+});
+
+contextBridge.exposeInMainWorld("appAPI", {
+  getVersion: () => ipcRenderer.invoke("app:get-version"),
 });

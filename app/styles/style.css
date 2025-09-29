@@ -53,6 +53,7 @@ body {
   align-items: center;
   justify-content: space-between;
 }
+
 .title {
   font-size: 20px;
   font-weight: 700;
@@ -346,4 +347,115 @@ body {
   border: 1px solid #7a3a3f;
   border-left: 4px solid #ff4d5a;
   color: #ffd9dc;
+}
+.actions .right-group {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.right-group .main-buttons,
+.right-group .week-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.week-nav button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 10px;
+  min-width: 110px;
+  background: #2a2f36;
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s ease, transform 0.05s ease;
+  text-align: center;
+}
+.week-nav button:hover {
+  background: #353b44;
+}
+.week-nav button:active {
+  transform: translateY(1px);
+}
+
+.week-nav.bottom-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.footer-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.footer-bar .meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.footer-bar .info-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.footer-bar .week-nav {
+  display: flex;
+  gap: 14px;
+}
+
+.footer-bar .week-nav button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 10px;
+  min-width: 110px;
+  background: #2a2f36;
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s ease, transform 0.05s ease;
+  text-align: center;
+}
+.footer-bar .week-nav button:hover {
+  background: #353b44;
+}
+.footer-bar .week-nav button:active {
+  transform: translateY(1px);
+}
+
+.tag.type-lt {
+  color: #1e90ff;
+  font-weight: bold;
+}
+
+.tag.type-th {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.title span {
+  font-size: 16px;
+  font-weight: bold;
+}
+.version-label {
+  font-size: 11px;
+  color: #bbb;
+  margin-left: 6px;
+  font-weight: normal;
 }

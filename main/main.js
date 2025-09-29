@@ -9,7 +9,7 @@ import {
 } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getSchedule } from "../app/fetcher/getSchedule.js";
+import { getScheduleB } from "../app/fetcher/getScheduleB.js";
 import { showLoginWindow } from "../app/fetcher/loginWindow.js";
 import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
@@ -28,23 +28,40 @@ ipcMain.handle("get-userData-path", () => app.getPath("userData"));
 
 ipcMain.handle("widget:refresh", async () => {
   try {
-    await ensureScheduleReady({ gentle: true });
+    console.log("[IPC] widget:refresh -> getScheduleB(0)");
+    await getScheduleB(0);
+    win?.webContents.send("status", "Lịch đã sẵn sàng");
+  } catch (err) {
+    console.warn("[widget:refresh] fail:", err);
+    win?.webContents.send(
+      "status",
+      "Không tải được lịch, đang dùng dữ liệu cũ."
+    );
   } finally {
     win?.webContents.send("reload");
   }
 });
+
 ipcMain.handle("widget:hide", () => win?.hide());
 ipcMain.handle("widget:quit", () => app.quit());
 
 ipcMain.handle("widget:login", async () => {
-  await showLoginWindow(win);
-  await ensureScheduleReady({ gentle: false });
-  win?.webContents.send("reload");
-  win?.webContents.send("login-success");
+  try {
+    console.log("[IPC] widget:login -> mở cửa sổ login");
+    await showLoginWindow(win);
+    console.log("[IPC] widget:login -> gọi getScheduleB(0)");
+    await getScheduleB(0);
+    console.log("[IPC] widget:login -> fetch thành công");
+    win?.webContents.send("reload");
+    win?.webContents.send("login-success");
 
-  if (win && !win.isDestroyed()) {
-    win.show();
-    win.focus();
+    if (win && !win.isDestroyed()) {
+      win.show();
+      win.focus();
+    }
+  } catch (err) {
+    console.error("[widget:login] fail:", err);
+    win?.webContents.send("status", "Đăng nhập thất bại.");
   }
 });
 
@@ -81,38 +98,24 @@ ipcMain.handle("app:install-update", async () => {
 
 ipcMain.handle("app:get-version", () => app.getVersion());
 
-async function ensureScheduleReady({ gentle = false } = {}) {
+ipcMain.handle("widget:fetch-week", async (_, offset) => {
   try {
-    win?.webContents.send("status", "Đang tải lịch...");
-    const data = await getSchedule();
-    win?.webContents.send("status", "Lịch đã sẵn sàng");
+    console.log("[IPC] widget:fetch-week offset:", offset);
+    const data = await getScheduleB(offset);
+    console.log("[IPC] widget:fetch-week done, items:", data?.data?.length);
     return data;
   } catch (err) {
-    const msg = String(err?.message || err);
-    console.warn("[ensureScheduleReady] fetch failed:", msg);
-
-    if (/Cookies not found|AUTH|HTTP\s*401|hết hạn/i.test(msg)) {
-      win?.webContents.send(
-        "status",
-        "Phiên đăng nhập đã hết hạn. Bấm “Đăng nhập lại” để cập nhật lịch."
-      );
-      return null;
-    }
-
-    win?.webContents.send(
-      "status",
-      "Không tải được lịch, đang dùng dữ liệu cũ. Bạn có thể bấm Làm mới."
-    );
+    console.warn("fetch-week error:", err);
     return null;
   }
-}
+});
 
 function createWindow() {
   if (win && !win.isDestroyed()) return win;
 
   win = new BrowserWindow({
     width: 800,
-    height: 635,
+    height: 615,
     backgroundColor: "#141414",
     frame: false,
     resizable: false,
@@ -130,6 +133,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "../app/index.html"));
 
   win.webContents.on("did-finish-load", () => {
+    console.log("[main] did-finish-load -> gửi reload");
     win?.webContents.send("status", "Đang khởi động...");
     win?.webContents.send("reload");
   });
@@ -150,18 +154,6 @@ function showWindow() {
   const y = Math.max(0, pos.y - height - 10);
   win.setBounds({ x, y, width, height });
   win.showInactive();
-}
-
-function sendToRenderer(channel, msg) {
-  if (win && !win.isDestroyed()) {
-    if (win.webContents.isLoading()) {
-      win.webContents.once("did-finish-load", () => {
-        win.webContents.send(channel, msg);
-      });
-    } else {
-      win.webContents.send(channel, msg);
-    }
-  }
 }
 
 async function createTray() {
@@ -199,23 +191,26 @@ app.whenReady().then(async () => {
   await createTray();
 
   try {
-    await ensureScheduleReady({ gentle: true });
+    console.log("[main] app ready -> gọi getScheduleB(0)");
+    await getScheduleB(0);
+    console.log("[main] getScheduleB ok!");
     createWindow();
-  } catch {
+  } catch (err) {
+    console.error("[main] getScheduleB fail:", err);
     createWindow();
   }
 
   autoUpdater.checkForUpdates().catch(() => {});
 
-  // refresh data mỗi 12h
   refreshTimer = setInterval(async () => {
     try {
-      await ensureScheduleReady({ gentle: true });
+      console.log("[main] refreshTimer -> gọi getScheduleB(0)");
+      await getScheduleB(0);
       win?.webContents.send("reload");
     } catch (err) {
-      console.error("Refresh fail:", err.message);
+      console.error("[main] refreshTimer fail:", err);
     }
-  }, 12 * 60 * 60 * 1000);
+  }, 6 * 60 * 60 * 1000);
 
   globalShortcut.register("Esc", () => {
     if (win?.isVisible()) win.hide();
@@ -226,4 +221,5 @@ app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   if (refreshTimer) clearInterval(refreshTimer);
 });
+
 app.on("window-all-closed", (e) => e.preventDefault());

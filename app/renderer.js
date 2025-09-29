@@ -1,3 +1,5 @@
+import { startOfWeek } from "../app/utils/date.js";
+
 const $ = (s, r = document) => r.querySelector(s);
 const setStatus = (msg) => {
   const el = $("#status");
@@ -18,6 +20,8 @@ const periodsTime = {
   11: ["15:50", "16:35"],
   12: ["16:40", "17:25"],
 };
+
+let currentWeek = startOfWeek(new Date());
 
 function byDay(data) {
   const m = {};
@@ -58,7 +62,7 @@ if (window.statusAPI?.onStatus) {
 }
 if (window.scheduleAPI?.onReload) {
   window.scheduleAPI.onReload(async () => {
-    await render();
+    await render(window.dateAPI.weekKey(currentWeek));
   });
 }
 
@@ -66,16 +70,42 @@ function getWeekDays(firstDay, lastDay) {
   const days = [];
   const d = new Date(firstDay);
   while (d <= lastDay) {
-    days.push(d.toISOString().split("T")[0]);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    days.push(`${yyyy}-${mm}-${dd}`);
     d.setDate(d.getDate() + 1);
   }
   return days;
 }
 
-async function render() {
+function cleanRoom(room = "") {
+  return room
+    .replace(/^Phòng học\//i, "")
+    .replace(/^Phòng hiệu năng cao\s*/i, "");
+}
+
+async function changeWeek(offset) {
+  try {
+    const payload = await window.widgetAPI.fetchWeek(offset);
+    if (!payload) {
+      showToast("Không có dữ liệu tuần này.");
+      return;
+    }
+
+    if (payload.weekStart) {
+      currentWeek = new Date(payload.weekStart);
+      await render(window.dateAPI.weekKey(currentWeek));
+    }
+  } catch (err) {
+    console.warn("[changeWeek:B] fetch fail:", err);
+  }
+}
+
+async function render(isoDate) {
   const el = $("#content");
   try {
-    const payload = await window.scheduleAPI?.load?.();
+    const payload = await window.scheduleAPI?.load?.(isoDate);
     const hasCookies = await window.scheduleAPI?.cookiesExists?.();
 
     let state = "first";
@@ -92,51 +122,40 @@ async function render() {
 
     if (!payload) {
       metaHtml = "Chưa có dữ liệu";
-      bodyHtml = `<div class="empty">
-        Chưa có dữ liệu lịch. Bạn cần <b>${loginLabel}</b> để tải lịch.
-      </div>`;
+      bodyHtml = `<div class="empty">Chưa có dữ liệu lịch. Bạn cần <b>${loginLabel}</b> để tải lịch.</div>`;
     } else {
-      const { updatedAt, data } = payload;
+      const { updatedAt, data, weekStart } = payload;
       const grouped = byDay(data);
-      const days = Object.keys(grouped).sort();
+      const firstDay = new Date(weekStart);
+      const lastDay = new Date(firstDay);
+      lastDay.setDate(firstDay.getDate() + 6);
+
+      const weekDays = getWeekDays(firstDay, lastDay);
 
       metaHtml = `Cập nhật: ${new Date(updatedAt).toLocaleString(
         "vi-VN"
       )}<br/>`;
+      metaHtml += `<span class="week-range" style="font-weight:bold;color:white">Tuần: 
+      ${firstDay.toLocaleDateString("vi-VN")} → ${lastDay.toLocaleDateString(
+        "vi-VN"
+      )}
+    </span>`;
 
-      if (days.length === 0) {
-        bodyHtml = `<div class="empty">Không có lịch học trong tuần này.</div>`;
-      } else {
-        const firstDay = new Date(days[0]);
-        firstDay.setDate(
-          firstDay.getDate() -
-            (firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1)
-        );
-        const lastDay = new Date(firstDay);
-        lastDay.setDate(firstDay.getDate() + 6);
-
-        const rangeText = `${firstDay.toLocaleDateString(
-          "vi-VN"
-        )} → ${lastDay.toLocaleDateString("vi-VN")}`;
-        metaHtml += `Tuần: ${rangeText}`;
-
-        const weekDays = getWeekDays(firstDay, lastDay);
-
-        bodyHtml = `
-          <div class="calendar" id="cal">
-            ${weekDays
-              .map((d) => {
-                const entries = grouped[d] ?? [];
-                return `
-                  <section class="day-col">
-                    <header class="day-h">
-                      ${new Date(d).toLocaleDateString("vi-VN", {
-                        weekday: "long",
-                        day: "2-digit",
-                        month: "2-digit",
-                      })}
-                    </header>
-                    <div class="day-body">
+      bodyHtml = `
+        <div class="calendar" id="cal">
+          ${weekDays
+            .map((d) => {
+              const entries = grouped[d] ?? [];
+              return `
+                <section class="day-col">
+                  <header class="day-h">
+                    ${new Date(d).toLocaleDateString("vi-VN", {
+                      weekday: "long",
+                      day: "2-digit",
+                      month: "2-digit",
+                    })}
+                  </header>
+                  <div class="day-body">
                     ${
                       entries.length > 0
                         ? entries
@@ -150,11 +169,13 @@ async function render() {
                                       s.periods
                                     )}
                                     <span class="sep"> | </span>${s.session}
-                                    <span class="tag ${normalizeType(
-                                      s.type
-                                    )}">${s.type}</span>
+                                    <span class="tag type-${s.type.toLowerCase()}">${
+                                s.type
+                              }</span>
                                   </div>
-                                  <div class="line room">${s.room ?? ""}</div>
+                                  <div class="line room">${cleanRoom(
+                                    s.room
+                                  )}</div>
                                   ${
                                     s.teacher
                                       ? `<div class="line teacher">GV ${s.teacher}</div>`
@@ -167,21 +188,20 @@ async function render() {
                         : `<div class="no-class">Không phải đi học <span class="icon">🎉</span></div>`
                     }
                   </div>
-                  </section>
-                `;
-              })
-              .join("")}
-          </div>
-        `;
-      }
+                </section>`;
+            })
+            .join("")}
+        </div>`;
     }
+
+    const version = await window.appAPI.getVersion();
 
     el.innerHTML = `
       <div class="shell">
         <div class="head">
           <div class="title">
             <img src="assets/uneti.webp" class="logo" alt="logo" />
-            <span>Lịch học UNETI</span>
+            <span>Lịch học UNETI <span class="version-label">v${version}</span></span>
           </div>
           <div class="actions">
             <div class="left-group">
@@ -195,7 +215,15 @@ async function render() {
             </div>
           </div>
         </div>
-        <div class="meta">${metaHtml}</div>
+        
+        <div class="footer-bar">
+          <div class="meta">${metaHtml}</div>
+          <div class="week-nav">
+            <button id="btn-prev-week">← Trước</button>
+            <button id="btn-next-week">Sau →</button>
+          </div>
+        </div>
+
         <div class="body">${bodyHtml}</div>
       </div>`;
 
@@ -204,51 +232,39 @@ async function render() {
     const btnRefresh = $("#btn-refresh");
     const btnHide = $("#btn-hide");
     const btnExit = $("#btn-exit");
+    const btnPrevWeek = $("#btn-prev-week");
+    const btnNextWeek = $("#btn-next-week");
 
-    if (state === "ok") {
-      btnLogin.style.display = "none";
-    } else {
-      btnRefresh.style.display = "none";
-    }
+    if (state === "ok") btnLogin.style.display = "none";
+    else btnRefresh.style.display = "none";
 
-    if (window.updateAPI?.onUpdateToast) {
-      window.updateAPI.onUpdateToast((msg) => {
-        const toast = document.createElement("div");
-        toast.className = "toast update";
-        toast.textContent = msg;
-        toast.style.cursor = "pointer";
+    btnPrevWeek?.addEventListener("click", async () => {
+      btnPrevWeek.disabled = true;
+      showToast("Vui lòng đợi...");
 
-        if (/cập nhật/i.test(msg)) {
-          toast.addEventListener("click", async () => {
-            const btn = document.getElementById("btn-update");
-            if (!btn) return;
-            const old = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = "Đang cập nhật...";
+      try {
+        await changeWeek(-1);
+        showToast("Tải lịch thành công!");
+      } catch (err) {
+        showToast("Lỗi khi tải tuần trước: " + (err?.message ?? err));
+      } finally {
+        btnPrevWeek.disabled = false;
+      }
+    });
 
-            const ok = await window.updateAPI.install();
-            if (ok) {
-              toast.textContent =
-                "Cập nhật thành công, ứng dụng sẽ khởi động lại...";
-            } else {
-              toast.textContent = "Lỗi khi cập nhật.";
-            }
+    btnNextWeek?.addEventListener("click", async () => {
+      btnNextWeek.disabled = true;
+      showToast("Vui lòng đợi...");
 
-            setTimeout(() => toast.remove(), 4000);
-            btn.textContent = old;
-            btn.disabled = false;
-          });
-        }
-
-        document.body.appendChild(toast);
-        requestAnimationFrame(() => toast.classList.add("show"));
-
-        setTimeout(() => {
-          toast.classList.remove("show");
-          setTimeout(() => toast.remove(), 300);
-        }, 8000);
-      });
-    }
+      try {
+        await changeWeek(1);
+        showToast("Tải lịch thành công!");
+      } catch (err) {
+        showToast("Lỗi khi tải tuần sau: " + (err?.message ?? err));
+      } finally {
+        btnNextWeek.disabled = false;
+      }
+    });
 
     btnUpdate?.addEventListener("click", async () => {
       const old = btnUpdate.textContent;
@@ -260,11 +276,8 @@ async function render() {
         if (res?.update) {
           btnUpdate.textContent = "Đang cập nhật...";
           const ok = await window.updateAPI.install();
-          if (ok) {
-            showToast("Cập nhật thành công. Đang khởi động lại...");
-          } else {
-            showToast("Lỗi khi cập nhật.");
-          }
+          if (ok) showToast("Cập nhật thành công. Đang khởi động lại...");
+          else showToast("Lỗi khi cập nhật.");
         } else if (res?.error) {
           showToast("Lỗi kiểm tra: " + res.error);
         } else {
@@ -284,7 +297,7 @@ async function render() {
         showToast("Đăng nhập thành công, lịch đã cập nhật!");
         btnLogin.style.display = "none";
         if (btnRefresh) btnRefresh.style.display = "";
-        await render();
+        await render(window.dateAPI.weekKey(currentWeek));
       } catch (e) {
         showToast("Đăng nhập thất bại: " + (e?.message ?? e));
       }
@@ -330,12 +343,5 @@ async function render() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  if (!$("#status")) {
-    const bar = document.createElement("div");
-    bar.id = "status";
-    bar.style.cssText = "padding:6px 10px;font-size:13px;color:#bbb;";
-    bar.textContent = "Đang khởi động...";
-    document.body.prepend(bar);
-  }
-  await render();
+  await render(window.dateAPI.weekKey(currentWeek));
 });
