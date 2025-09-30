@@ -107,7 +107,7 @@ window.updateAPI?.onUpdateToast?.((msg) => {
   toast
     .querySelector("#btn-toast-update-now")
     ?.addEventListener("click", async () => {
-      createToast(`<div id="upd-line">⬇️ Cập nhật: 0%</div>`, {
+      createToast(`<div id="upd-line">Đnag cập nhật: 0%</div>`, {
         id: progressToastId,
         clickable: true,
         duration: 0,
@@ -133,19 +133,18 @@ window.updateAPI?.onProgress?.((p) => {
 
 window.updateAPI?.onDownloaded?.(() => {
   hideToast(progressToastId);
-  const html = `
-    <div style="display:flex;gap:.75rem;align-items:center;">
-      <div style="flex:1">Tải xong bản cập nhật. Khởi động lại để cài đặt?</div>
-      <button id="btn-relaunch" class="btn">Khởi động lại</button>
-    </div>`;
-  const toast = createToast(`Đã tải xong bản cập nhật. Bấm để khởi động lại.`, {
-    id: "update-ready",
-    clickable: true,
-    duration: 0,
-  });
-  toast.querySelector("#btn-relaunch")?.addEventListener("click", () => {
+
+  createToast(
+    "Đã tải xong bản cập nhật. Chuẩn bị khởi động lại để cài đặt...",
+    {
+      id: "update-ready",
+      duration: 3000,
+    }
+  );
+
+  setTimeout(() => {
     window.updateAPI.confirmInstall();
-  });
+  }, 3000);
 });
 
 window.updateAPI?.onError?.((msg) => {
