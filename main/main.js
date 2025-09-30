@@ -172,7 +172,7 @@ function createWindow() {
 
   win = new BrowserWindow({
     width: 800,
-    height: 615,
+    height: 642,
     backgroundColor: "#141414",
     frame: false,
     resizable: false,
@@ -191,7 +191,10 @@ function createWindow() {
 
   win.webContents.on("did-finish-load", () => {
     console.log("[main] did-finish-load -> gửi reload");
-    win?.webContents.send("status", "Đang khởi động...");
+    win?.webContents.send(
+      "status",
+      '<span class="loading-text">Đang tải</span>'
+    );
     win?.webContents.send("reload");
   });
 

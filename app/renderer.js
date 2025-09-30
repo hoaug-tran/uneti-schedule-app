@@ -1,10 +1,10 @@
 import { startOfWeek } from "../app/utils/date.js";
 
 const $ = (s, r = document) => r.querySelector(s);
-const setStatus = (msg) => {
+function setStatus(msg) {
   const el = $("#status");
-  if (el) el.textContent = msg ?? "";
-};
+  if (el) el.innerHTML = msg ?? "";
+}
 
 function createToast(html, { id, duration = 3000, clickable = false } = {}) {
   let toast = id ? document.getElementById(id) : null;
@@ -358,10 +358,9 @@ async function render(isoDate) {
         const res = await window.updateAPI?.check?.();
         if (res?.update) {
           if (!updateToastShown) {
-            window.updateAPI.onUpdateToast((msg) => {}); // no-op
+            window.updateAPI.onUpdateToast((msg) => {});
             const html = `
               <div style="display:flex; gap:.75rem; align-items:center;">
-                <span>🔔</span>
                 <div style="flex:1">Có bản cập nhật mới (v${res.version}). Bấm để cập nhật ngay.</div>
                 <button id="btn-toast-update-now" class="btn">Cập nhật ngay</button>
               </div>`;
@@ -444,6 +443,13 @@ async function render(isoDate) {
 
     const statusEl = document.getElementById("status");
     if (statusEl) statusEl.style.display = "none";
+    const overlay = document.getElementById("loading-overlay");
+    if (overlay) {
+      setTimeout(() => {
+        overlay.style.opacity = "0";
+        setTimeout(() => (overlay.style.display = "none"), 300);
+      }, 800);
+    }
   } catch (e) {
     el.innerHTML = `<div class="empty">Có lỗi khi hiển thị: ${
       e?.message ?? e
