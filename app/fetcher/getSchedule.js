@@ -81,6 +81,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
     console.log("[getSchedule] offsets:", lastOffsets);
 
     target = lastOffsets.current;
+    await clearWeekJson(target);
     return await processFragment(fragment, target, lastOffsets);
   }
 
@@ -121,7 +122,22 @@ export async function getSchedule(offset = 0, baseDate = null) {
   };
   console.log("[getSchedule] new offsets:", lastOffsets);
 
+  await clearWeekJson(target);
   return await processFragment(fragment, target, lastOffsets);
+}
+
+async function clearWeekJson(target) {
+  if (!target) return;
+  try {
+    const [dd, mm, yyyy] = target.split("/");
+    const weekStart = new Date(+yyyy, +mm - 1, +dd);
+    const key = weekKey(weekStart);
+    const filePath = path.join(getStoreDir(), `schedule-${key}.json`);
+    await fs.rm(filePath, { force: true });
+    console.log("[clearWeekJson] removed old file:", filePath);
+  } catch (err) {
+    console.warn("[clearWeekJson] fail:", err);
+  }
 }
 
 async function processFragment(fragment, target, offsets) {

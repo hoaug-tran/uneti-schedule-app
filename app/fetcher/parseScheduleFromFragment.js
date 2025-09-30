@@ -1,5 +1,4 @@
 import * as cheerio from "cheerio";
-import { parseYMDLocal } from "../utils/date.js";
 
 export function parseScheduleFromFragment(html) {
   const $ = cheerio.load(html);
@@ -32,6 +31,9 @@ export function parseScheduleFromFragment(html) {
           .find("div.content")
           .each((_, div) => {
             const subject = $(div).find("b a").text().trim();
+
+            const classInfo = $(div).find("p").first().text().trim();
+
             const periodsTxt = $(div)
               .text()
               .match(/Tiết:\s*([\d\s-]+)/i);
@@ -44,32 +46,45 @@ export function parseScheduleFromFragment(html) {
                 periods.push(range[0]);
               }
             }
-            const room = $(div)
+
+            let room = "";
+            const roomFont = $(div)
               .find("span[lang='giang-duong']")
-              .parent()
-              .text()
-              .replace("Phòng:", "")
-              .replace("Phòng học/", "")
-              .trim();
+              .next("font");
+            if (roomFont.length) {
+              room = roomFont.text().trim();
+              if (room.startsWith("Phòng học/")) {
+                room = room.replace(/^Phòng học\//, "").trim();
+              }
+            }
 
-            const teacher = $(div)
+            let teacher = "";
+            const teacherFont = $(div)
               .find("span[lang='lichtheotuan-gv']")
-              .parent()
-              .text()
-              .replace("GV:", "")
-              .trim();
+              .next("font");
+            if (teacherFont.length) {
+              teacher = teacherFont.text().trim();
+            }
 
-            // Xác định loại (LT/TH/Online/Thi) dựa vào màu hoặc class
             let type = "LT";
+            const divClass = $(div).attr("class") || "";
             const style = $(div).attr("style") || "";
-            if (style.includes("#71cb35")) type = "TH";
-            if (style.includes("#92d6ff")) type = "Online";
-            if (style.includes("LichThi")) type = "Thi";
+
+            if (/lichthi/i.test(divClass) || style.includes("LichThi")) {
+              type = "Thi";
+            } else if (style.includes("#71cb35")) {
+              type = "TH";
+            } else if (style.includes("#92d6ff")) {
+              type = "Online";
+            } else {
+              type = "LT";
+            }
 
             data.push({
               day,
               session,
               subject,
+              classInfo,
               periods,
               room,
               teacher,

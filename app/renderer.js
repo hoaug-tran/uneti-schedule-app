@@ -107,7 +107,7 @@ window.updateAPI?.onUpdateToast?.((msg) => {
   toast
     .querySelector("#btn-toast-update-now")
     ?.addEventListener("click", async () => {
-      createToast(`<div id="upd-line">Đnag cập nhật: 0%</div>`, {
+      createToast(`<div id="upd-line">Đang cập nhật: 0%</div>`, {
         id: progressToastId,
         clickable: true,
         duration: 0,
@@ -428,6 +428,16 @@ async function render(isoDate) {
     btnHide?.addEventListener("click", () => window.widgetAPI?.hide?.());
     btnExit?.addEventListener("click", () => window.widgetAPI?.quit?.());
 
+    if (window.widgetAPI?.onLoginRequired) {
+      window.widgetAPI.onLoginRequired(() => {
+        showToast("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
+        const btnLogin = document.getElementById("btn-login");
+        const btnRefresh = document.getElementById("btn-refresh");
+        if (btnLogin) btnLogin.style.display = "";
+        if (btnRefresh) btnRefresh.style.display = "none";
+      });
+    }
+
     const cal = $("#cal");
     cal?.addEventListener(
       "wheel",
@@ -457,5 +467,15 @@ async function render(isoDate) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  if (window.widgetAPI?.onLoginRequired) {
+    window.widgetAPI.onLoginRequired(() => {
+      showToast("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
+      const btnLogin = document.getElementById("btn-login");
+      const btnRefresh = document.getElementById("btn-refresh");
+      if (btnLogin) btnLogin.style.display = "";
+      if (btnRefresh) btnRefresh.style.display = "none";
+    });
+  }
+
   await render(window.dateAPI.weekKey(currentWeek));
 });

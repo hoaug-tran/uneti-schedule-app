@@ -35,12 +35,20 @@ ipcMain.handle("widget:refresh", async () => {
     win?.webContents.send("status", "Lịch đã sẵn sàng");
   } catch (err) {
     console.warn("[widget:refresh] fail:", err);
-    win?.webContents.send(
-      "status",
-      "Không tải được lịch, đang dùng dữ liệu cũ."
-    );
-  } finally {
-    win?.webContents.send("reload");
+
+    if (String(err).includes("Cookie hết hạn")) {
+      win?.webContents.send(
+        "status",
+        "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại."
+      );
+      win?.webContents.send("login-required");
+    } else {
+      win?.webContents.send(
+        "status",
+        "Không tải được lịch, đang dùng dữ liệu cũ."
+      );
+      win?.webContents.send("reload");
+    }
   }
 });
 
@@ -172,7 +180,7 @@ function createWindow() {
 
   win = new BrowserWindow({
     width: 800,
-    height: 642,
+    height: 677,
     backgroundColor: "#141414",
     frame: false,
     resizable: false,
@@ -249,37 +257,60 @@ async function createTray() {
 
 app.whenReady().then(async () => {
   await createTray();
+  createWindow();
 
   try {
-    console.log("[main] app ready -> gọi getSchedule(0)");
+    console.log("[main] app ready -> fetch tuần hiện tại và tuần sau");
     await getSchedule(0);
-    console.log("[main] getSchedule ok!");
-    createWindow();
+    await getSchedule(1);
+    console.log("[main] fetch ban đầu ok!");
+    win?.webContents.send("reload");
   } catch (err) {
-    console.error("[main] getSchedule fail:", err);
-    createWindow();
+    console.error("[main] getSchedule initial fail:", err);
+    if (String(err).includes("Cookie hết hạn")) {
+      win?.webContents.send(
+        "status",
+        "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại."
+      );
+      win?.webContents.send("login-required");
+    }
   }
 
   autoUpdater.checkForUpdates().catch(() => {});
 
-  refreshTimer = setInterval(async () => {
+  function inActiveHours() {
+    const h = new Date().getHours();
+    return h >= 6 && h <= 23;
+  }
+
+  setInterval(async () => {
+    if (!inActiveHours()) return;
     try {
-      console.log("[main] refreshTimer -> gọi getSchedule(0)");
+      console.log("[main] autoRefresh -> getSchedule(0) (tuần hiện tại)");
       await getSchedule(0);
       win?.webContents.send("reload");
     } catch (err) {
-      console.error("[main] refreshTimer fail:", err);
+      console.error("[main] autoRefresh current week fail:", err);
+    }
+  }, 60 * 60 * 1000);
+
+  setInterval(async () => {
+    if (!inActiveHours()) return;
+    try {
+      console.log("[main] autoRefresh -> getSchedule(1) (tuần sau)");
+      await getSchedule(1);
+      win?.webContents.send("reload");
+    } catch (err) {
+      console.error("[main] autoRefresh next week fail:", err);
     }
   }, 6 * 60 * 60 * 1000);
 
-  globalShortcut.register("Esc", () => {
-    if (win?.isVisible()) win.hide();
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type === "keyDown" && input.key === "Escape") {
+      event.preventDefault();
+      if (win.isVisible()) win.hide();
+    }
   });
-});
-
-app.on("before-quit", () => {
-  globalShortcut.unregisterAll();
-  if (refreshTimer) clearInterval(refreshTimer);
 });
 
 app.on("window-all-closed", (e) => e.preventDefault());

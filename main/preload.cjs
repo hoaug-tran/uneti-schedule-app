@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld("widgetAPI", {
   fetchWeek: (offset) => ipcRenderer.invoke("widget:fetch-week", offset),
   login: () => ipcRenderer.invoke("widget:login"),
   onLogin: (cb) => ipcRenderer.on("login-success", cb),
+  onLoginRequired: (cb) => ipcRenderer.on("login-required", cb),
 });
 
 contextBridge.exposeInMainWorld("statusAPI", {
