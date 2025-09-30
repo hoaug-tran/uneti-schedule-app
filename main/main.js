@@ -9,11 +9,13 @@ import {
 } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getScheduleB } from "../app/fetcher/getScheduleB.js";
+import { getSchedule } from "../app/fetcher/getSchedule.js";
 import { showLoginWindow } from "../app/fetcher/loginWindow.js";
 import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
 const { autoUpdater } = pkg;
+
+autoUpdater.autoDownload = false;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,8 +30,8 @@ ipcMain.handle("get-userData-path", () => app.getPath("userData"));
 
 ipcMain.handle("widget:refresh", async () => {
   try {
-    console.log("[IPC] widget:refresh -> getScheduleB(0)");
-    await getScheduleB(0);
+    console.log("[IPC] widget:refresh -> getSchedule(0)");
+    await getSchedule(0);
     win?.webContents.send("status", "Lịch đã sẵn sàng");
   } catch (err) {
     console.warn("[widget:refresh] fail:", err);
@@ -49,8 +51,8 @@ ipcMain.handle("widget:login", async () => {
   try {
     console.log("[IPC] widget:login -> mở cửa sổ login");
     await showLoginWindow(win);
-    console.log("[IPC] widget:login -> gọi getScheduleB(0)");
-    await getScheduleB(0);
+    console.log("[IPC] widget:login -> gọi getSchedule(0)");
+    await getSchedule(0);
     console.log("[IPC] widget:login -> fetch thành công");
     win?.webContents.send("reload");
     win?.webContents.send("login-success");
@@ -85,13 +87,68 @@ ipcMain.handle("app:check-update", async () => {
   }
 });
 
+let stallTimer = null;
+let lastTransferred = 0;
+let downloading = false;
+
+function resetStallWatch() {
+  if (stallTimer) clearTimeout(stallTimer);
+  stallTimer = setTimeout(() => {
+    if (downloading) {
+      win?.webContents.send(
+        "update:error",
+        "Mạng không ổn định, tải cập nhật bị gián đoạn. Vui lòng kiểm tra kết nối và thử lại."
+      );
+      downloading = false;
+      lastTransferred = 0;
+    }
+  }, 20000);
+}
+
+autoUpdater.on("download-progress", (p) => {
+  downloading = true;
+  const { percent, transferred, total, bytesPerSecond } = p;
+  win?.webContents.send("update:progress", {
+    percent,
+    transferred,
+    total,
+    bytesPerSecond,
+  });
+  if (transferred !== lastTransferred) {
+    lastTransferred = transferred;
+    resetStallWatch();
+  }
+});
+
+autoUpdater.on("update-downloaded", () => {
+  downloading = false;
+  if (stallTimer) clearTimeout(stallTimer);
+  win?.webContents.send("update:downloaded");
+});
+
+autoUpdater.on("error", (err) => {
+  downloading = false;
+  if (stallTimer) clearTimeout(stallTimer);
+  win?.webContents.send("update:error", err?.message ?? String(err));
+});
+
 ipcMain.handle("app:install-update", async () => {
   try {
     await autoUpdater.downloadUpdate();
-    autoUpdater.quitAndInstall();
+
     return true;
   } catch (e) {
     console.error("install update error:", e);
+    return false;
+  }
+});
+
+ipcMain.handle("app:confirm-install", () => {
+  try {
+    autoUpdater.quitAndInstall();
+    return true;
+  } catch (e) {
+    console.error("confirm install error:", e);
     return false;
   }
 });
@@ -101,7 +158,7 @@ ipcMain.handle("app:get-version", () => app.getVersion());
 ipcMain.handle("widget:fetch-week", async (_, offset) => {
   try {
     console.log("[IPC] widget:fetch-week offset:", offset);
-    const data = await getScheduleB(offset);
+    const data = await getSchedule(offset);
     console.log("[IPC] widget:fetch-week done, items:", data?.data?.length);
     return data;
   } catch (err) {
@@ -191,12 +248,12 @@ app.whenReady().then(async () => {
   await createTray();
 
   try {
-    console.log("[main] app ready -> gọi getScheduleB(0)");
-    await getScheduleB(0);
-    console.log("[main] getScheduleB ok!");
+    console.log("[main] app ready -> gọi getSchedule(0)");
+    await getSchedule(0);
+    console.log("[main] getSchedule ok!");
     createWindow();
   } catch (err) {
-    console.error("[main] getScheduleB fail:", err);
+    console.error("[main] getSchedule fail:", err);
     createWindow();
   }
 
@@ -204,8 +261,8 @@ app.whenReady().then(async () => {
 
   refreshTimer = setInterval(async () => {
     try {
-      console.log("[main] refreshTimer -> gọi getScheduleB(0)");
-      await getScheduleB(0);
+      console.log("[main] refreshTimer -> gọi getSchedule(0)");
+      await getSchedule(0);
       win?.webContents.send("reload");
     } catch (err) {
       console.error("[main] refreshTimer fail:", err);

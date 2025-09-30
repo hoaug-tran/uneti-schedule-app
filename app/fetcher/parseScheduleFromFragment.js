@@ -4,10 +4,9 @@ import { parseYMDLocal } from "../utils/date.js";
 export function parseScheduleFromFragment(html) {
   const $ = cheerio.load(html);
 
-  // Lấy header: map cột -> ngày
   const days = [];
   $("thead th").each((i, el) => {
-    if (i === 0) return; // bỏ cột "Ca học"
+    if (i === 0) return;
     const text = $(el).text().trim();
     const m = text.match(/(\d{2}\/\d{2}\/\d{4})$/);
     if (m) {
@@ -21,10 +20,10 @@ export function parseScheduleFromFragment(html) {
   const data = [];
 
   $("tbody tr").each((_, row) => {
-    const session = $(row).find("td").first().text().trim(); // Sáng/Chiều/Tối
+    const session = $(row).find("td").first().text().trim();
     $(row)
       .find("td")
-      .slice(1) // bỏ cột đầu tiên
+      .slice(1)
       .each((colIdx, cell) => {
         const day = days[colIdx];
         if (!day) return;

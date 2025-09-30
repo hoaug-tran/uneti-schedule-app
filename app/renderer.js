@@ -6,6 +6,41 @@ const setStatus = (msg) => {
   if (el) el.textContent = msg ?? "";
 };
 
+function createToast(html, { id, duration = 3000, clickable = false } = {}) {
+  let toast = id ? document.getElementById(id) : null;
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.className = "toast";
+    if (id) toast.id = id;
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = html;
+  requestAnimationFrame(() => toast.classList.add("show"));
+  if (!clickable && duration > 0) {
+    setTimeout(() => {
+      toast.classList.remove("show");
+      setTimeout(() => toast.remove(), 250);
+    }, duration);
+  }
+  return toast;
+}
+function hideToast(id) {
+  const toast = document.getElementById(id);
+  if (!toast) return;
+  toast.classList.remove("show");
+  setTimeout(() => toast.remove(), 250);
+}
+function fmtBytes(n) {
+  if (!Number.isFinite(n)) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n.toFixed(1)} ${units[i]}`;
+}
+
 const periodsTime = {
   1: ["07:00", "07:45"],
   2: ["07:50", "08:35"],
@@ -46,15 +81,7 @@ function normalizeType(str) {
     .replace(/\s+/g, "");
 }
 function showToast(msg) {
-  const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent = msg;
-  document.body.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add("show"));
-  setTimeout(() => {
-    toast.classList.remove("show");
-    setTimeout(() => toast.remove(), 250);
-  }, 3000);
+  createToast(msg);
 }
 
 if (window.statusAPI?.onStatus) {
@@ -65,6 +92,66 @@ if (window.scheduleAPI?.onReload) {
     await render(window.dateAPI.weekKey(currentWeek));
   });
 }
+
+let updateToastShown = false;
+let progressToastId = "update-progress-toast";
+
+window.updateAPI?.onUpdateToast?.((msg) => {
+  updateToastShown = true;
+  const html = `
+    <div style="display:flex; gap:.75rem; align-items:center;">
+      <div style="flex:1">${msg}</div>
+      <button id="btn-toast-update-now" class="btn">Cập nhật ngay</button>
+    </div>`;
+  const toast = createToast(html, { id: "update-available", clickable: true });
+  toast
+    .querySelector("#btn-toast-update-now")
+    ?.addEventListener("click", async () => {
+      createToast(`<div id="upd-line">⬇️ Cập nhật: 0%</div>`, {
+        id: progressToastId,
+        clickable: true,
+        duration: 0,
+      });
+      hideToast("update-available");
+      const ok = await window.updateAPI.install();
+      if (!ok) {
+        hideToast(progressToastId);
+        createToast("Không thể bắt đầu tải cập nhật.", { duration: 3000 });
+      }
+    });
+});
+
+window.updateAPI?.onProgress?.((p) => {
+  const el = document.getElementById("upd-line");
+  if (!el) return;
+  const pct = Math.max(0, Math.min(100, p?.percent ?? 0)).toFixed(0);
+  const done = fmtBytes(p?.transferred ?? 0);
+  const total = fmtBytes(p?.total ?? 0);
+  const speed = fmtBytes(p?.bytesPerSecond ?? 0) + "/s";
+  el.textContent = `Đang cập nhật: ${pct}% (${done} / ${total} - ${speed})`;
+});
+
+window.updateAPI?.onDownloaded?.(() => {
+  hideToast(progressToastId);
+  const html = `
+    <div style="display:flex;gap:.75rem;align-items:center;">
+      <div style="flex:1">Tải xong bản cập nhật. Khởi động lại để cài đặt?</div>
+      <button id="btn-relaunch" class="btn">Khởi động lại</button>
+    </div>`;
+  const toast = createToast(`Đã tải xong bản cập nhật. Bấm để khởi động lại.`, {
+    id: "update-ready",
+    clickable: true,
+    duration: 0,
+  });
+  toast.querySelector("#btn-relaunch")?.addEventListener("click", () => {
+    window.updateAPI.confirmInstall();
+  });
+});
+
+window.updateAPI?.onError?.((msg) => {
+  hideToast(progressToastId);
+  createToast(`Lỗi cập nhật: ${msg}`, { duration: 4000 });
+});
 
 function getWeekDays(firstDay, lastDay) {
   const days = [];
@@ -92,7 +179,6 @@ async function changeWeek(offset) {
       showToast("Không có dữ liệu tuần này.");
       return;
     }
-
     if (payload.weekStart) {
       currentWeek = new Date(payload.weekStart);
       await render(window.dateAPI.weekKey(currentWeek));
@@ -241,7 +327,6 @@ async function render(isoDate) {
     btnPrevWeek?.addEventListener("click", async () => {
       btnPrevWeek.disabled = true;
       showToast("Vui lòng đợi...");
-
       try {
         await changeWeek(-1);
         showToast("Tải lịch thành công!");
@@ -255,7 +340,6 @@ async function render(isoDate) {
     btnNextWeek?.addEventListener("click", async () => {
       btnNextWeek.disabled = true;
       showToast("Vui lòng đợi...");
-
       try {
         await changeWeek(1);
         showToast("Tải lịch thành công!");
@@ -270,14 +354,39 @@ async function render(isoDate) {
       const old = btnUpdate.textContent;
       btnUpdate.disabled = true;
       btnUpdate.textContent = "Đang kiểm tra...";
-
       try {
         const res = await window.updateAPI?.check?.();
         if (res?.update) {
-          btnUpdate.textContent = "Đang cập nhật...";
-          const ok = await window.updateAPI.install();
-          if (ok) showToast("Cập nhật thành công. Đang khởi động lại...");
-          else showToast("Lỗi khi cập nhật.");
+          if (!updateToastShown) {
+            window.updateAPI.onUpdateToast((msg) => {}); // no-op
+            const html = `
+              <div style="display:flex; gap:.75rem; align-items:center;">
+                <span>🔔</span>
+                <div style="flex:1">Có bản cập nhật mới (v${res.version}). Bấm để cập nhật ngay.</div>
+                <button id="btn-toast-update-now" class="btn">Cập nhật ngay</button>
+              </div>`;
+            const toast = createToast(html, {
+              id: "update-available",
+              clickable: true,
+            });
+            toast
+              .querySelector("#btn-toast-update-now")
+              ?.addEventListener("click", async () => {
+                createToast(`<div id="upd-line">Đang cập nhật: 0%</div>`, {
+                  id: progressToastId,
+                  clickable: true,
+                  duration: 0,
+                });
+                hideToast("update-available");
+                const ok = await window.updateAPI.install();
+                if (!ok) {
+                  hideToast(progressToastId);
+                  createToast("Không thể bắt đầu tải cập nhật.", {
+                    duration: 3000,
+                  });
+                }
+              });
+          }
         } else if (res?.error) {
           showToast("Lỗi kiểm tra: " + res.error);
         } else {

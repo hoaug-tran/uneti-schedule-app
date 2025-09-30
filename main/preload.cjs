@@ -71,8 +71,13 @@ contextBridge.exposeInMainWorld("statusAPI", {
 contextBridge.exposeInMainWorld("updateAPI", {
   check: () => ipcRenderer.invoke("app:check-update"),
   install: () => ipcRenderer.invoke("app:install-update"),
+  confirmInstall: () => ipcRenderer.invoke("app:confirm-install"),
   getVersion: () => ipcRenderer.invoke("app:get-version"),
   onUpdateToast: (cb) => ipcRenderer.on("toast-update", (_, msg) => cb(msg)),
+
+  onProgress: (cb) => ipcRenderer.on("update:progress", (_, p) => cb(p)),
+  onDownloaded: (cb) => ipcRenderer.on("update:downloaded", cb),
+  onError: (cb) => ipcRenderer.on("update:error", (_, msg) => cb(msg)),
 });
 
 contextBridge.exposeInMainWorld("dateAPI", {
