@@ -4,21 +4,21 @@
 
 Ứng dụng tích hợp trực tiếp với cổng thông tin sinh viên UNETI ([https://sinhvien.uneti.edu.vn](https://sinhvien.uneti.edu.vn)), cho phép sinh viên đăng nhập và lấy **thời khóa biểu chính thức**.
 
-⚠️ **Lưu ý:** Ứng dụng này chỉ dành cho sinh viên UNETI. Bạn cần có tài khoản sinh viên hợp lệ để sử dụng.
+**Lưu ý:** Ứng dụng này chỉ dành cho sinh viên UNETI. Bạn cần có tài khoản sinh viên hợp lệ để sử dụng.
 
 ---
 
-## ✨ Tính năng
+## Tính năng
 
-- 🖥️ Widget Electron gọn nhẹ, chạy nền và tích hợp vào **khay hệ thống (system tray)**
-- 🔑 **Đăng nhập trực tiếp trong ứng dụng** (không cần mở trình duyệt ngoài)
-- 📅 Hiển thị lịch học theo tuần: **môn học, buổi, tiết, phòng học, giảng viên**
-- 🔄 **Tự động làm mới** dữ liệu mỗi 12 giờ hoặc làm mới thủ công
-- 🍪 **Lưu cookies cục bộ** trong thư mục dữ liệu người dùng, không chia sẻ ra ngoài
+- **Widget Electron** gọn nhẹ, chạy nền và tích hợp vào **khay hệ thống (system tray)**
+- **Đăng nhập trực tiếp trong ứng dụng** (không cần mở trình duyệt ngoài)
+- Hiển thị lịch học theo tuần: **môn học, buổi, tiết, phòng học, giảng viên**
+- **Tự động làm mới** dữ liệu mỗi giờ hoặc làm mới thủ công
+- **Lưu cookies cục bộ** trong thư mục dữ liệu người dùng, không chia sẻ ra ngoài
 
 ---
 
-## 🛠️ Hướng dẫn cài đặt & build
+## Hướng dẫn cài đặt & build
 
 ### 1. Clone repository
 
@@ -56,7 +56,7 @@ File cài đặt sẽ nằm trong thư mục `dist/`.
 
 ---
 
-## 📂 Cấu trúc dự án
+## Cấu trúc dự án
 
 ```
 app/              # Frontend (HTML/CSS/JS cho widget)
@@ -69,7 +69,7 @@ main/             # Electron main process
 
 ---
 
-## 🚀 Cách sử dụng
+## Cách sử dụng
 
 1. Chạy ứng dụng.
 2. Lần đầu mở, cửa sổ đăng nhập sẽ hiện ra.
@@ -80,14 +80,14 @@ main/             # Electron main process
 
 ---
 
-## ✅ Kiểm thử
+## Hệ điều hành đã test
 
 - Đã test: **Windows 10/11**
-- Các nền tảng khác: _chưa test_
+- Các nền tảng khác: chưa test
 
 ---
 
-## ⚠️ Lưu ý
+## Lưu ý
 
 - Đây là công cụ **không chính thức**, phát triển nhằm hỗ trợ sinh viên UNETI theo dõi lịch học nhanh chóng.
 - Ứng dụng **không thuộc về Trường Đại học Kinh tế – Kỹ thuật Công nghiệp (UNETI)**, mà là **sản phẩm cá nhân** do sinh viên UNETI xây dựng.
