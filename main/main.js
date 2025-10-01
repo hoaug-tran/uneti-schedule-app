@@ -1,15 +1,8 @@
 import { app } from "./bootstrap.js";
-import {
-  BrowserWindow,
-  Tray,
-  nativeImage,
-  ipcMain,
-  globalShortcut,
-  Menu,
-} from "electron";
+import { BrowserWindow, Tray, nativeImage, ipcMain, Menu } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getSchedule } from "../app/fetcher/getSchedule.js";
+import { getSchedule, clearAllSchedules } from "../app/fetcher/getSchedule.js";
 import { showLoginWindow } from "../app/fetcher/loginWindow.js";
 import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
@@ -20,7 +13,7 @@ autoUpdater.autoDownload = false;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let tray, win, refreshTimer;
+let tray, win;
 const autoLauncher = new AutoLaunch({
   name: "UNETI Schedule Widget",
   path: process.execPath,
@@ -30,13 +23,16 @@ ipcMain.handle("get-userData-path", () => app.getPath("userData"));
 
 ipcMain.handle("widget:refresh", async () => {
   try {
-    console.log("[IPC] widget:refresh -> getSchedule(0)");
+    console.log("[IPC] widget:refresh -> clear & getSchedule(0)");
+    await clearAllSchedules();
     await getSchedule(0);
     win?.webContents.send("status", "Lịch đã sẵn sàng");
+    win?.webContents.send("reload");
   } catch (err) {
     console.warn("[widget:refresh] fail:", err);
 
-    if (String(err).includes("Cookie hết hạn")) {
+    const msg = String(err || "");
+    if (msg.includes("Cookie hết hạn") || msg.includes("No cookies")) {
       win?.webContents.send(
         "status",
         "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại."
@@ -60,6 +56,7 @@ ipcMain.handle("widget:login", async () => {
     console.log("[IPC] widget:login -> mở cửa sổ login");
     await showLoginWindow(win);
     console.log("[IPC] widget:login -> gọi getSchedule(0)");
+    await clearAllSchedules();
     await getSchedule(0);
     console.log("[IPC] widget:login -> fetch thành công");
     win?.webContents.send("reload");
@@ -93,6 +90,17 @@ ipcMain.handle("app:check-update", async () => {
     console.error("check update error:", e);
     return { error: e?.message ?? String(e) };
   }
+});
+
+ipcMain.handle("window:resize-height", (_, height) => {
+  console.log("[main] resize-height invoked with", height);
+  if (win && !win.isDestroyed()) {
+    const bounds = win.getBounds();
+    const newHeight = Math.max(600, Math.min(900, Math.round(height)));
+    win.setBounds({ ...bounds, height: newHeight });
+    return { ok: true, height: newHeight };
+  }
+  return { ok: false };
 });
 
 let stallTimer = null;
@@ -143,7 +151,6 @@ autoUpdater.on("error", (err) => {
 ipcMain.handle("app:install-update", async () => {
   try {
     await autoUpdater.downloadUpdate();
-
     return true;
   } catch (e) {
     console.error("install update error:", e);
@@ -151,9 +158,12 @@ ipcMain.handle("app:install-update", async () => {
   }
 });
 
-ipcMain.handle("app:confirm-install", () => {
+ipcMain.handle("app:confirm-install", async () => {
   try {
-    autoUpdater.quitAndInstall();
+    await clearAllSchedules();
+    app.removeAllListeners("window-all-closed");
+    app.quit();
+    autoUpdater.quitAndInstall(false, true);
     return true;
   } catch (e) {
     console.error("confirm install error:", e);
@@ -163,11 +173,10 @@ ipcMain.handle("app:confirm-install", () => {
 
 ipcMain.handle("app:get-version", () => app.getVersion());
 
-ipcMain.handle("widget:fetch-week", async (_, offset) => {
+ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
   try {
-    console.log("[IPC] widget:fetch-week offset:", offset);
-    const data = await getSchedule(offset);
-    console.log("[IPC] widget:fetch-week done, items:", data?.data?.length);
+    console.log("[IPC] widget:fetch-week offset:", offset, "baseIso:", baseIso);
+    const data = await getSchedule(offset, baseIso || null);
     return data;
   } catch (err) {
     console.warn("fetch-week error:", err);
@@ -180,10 +189,12 @@ function createWindow() {
 
   win = new BrowserWindow({
     width: 800,
-    height: 677,
+    height: 650,
+    maxHeight: 900,
+    minHeight: 600,
     backgroundColor: "#141414",
     frame: false,
-    resizable: false,
+    resizable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     roundedCorners: true,
@@ -209,6 +220,13 @@ function createWindow() {
   win.on("closed", () => (win = null));
   win.on("blur", () => win?.hide());
 
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type === "keyDown" && input.key === "Escape") {
+      event.preventDefault();
+      if (win.isVisible()) win.hide();
+    }
+  });
+
   return win;
 }
 
@@ -233,7 +251,9 @@ async function createTray() {
   tray.setToolTip("UNETI Lịch học");
 
   tray.on("click", () => {
-    if (!win || win.isDestroyed()) return;
+    if (!win || win.isDestroyed()) {
+      createWindow();
+    }
     win.isVisible() ? win.hide() : showWindow();
   });
 
@@ -249,7 +269,6 @@ async function createTray() {
       },
     },
     { type: "separator" },
-    { type: "separator" },
     { label: "Thoát", click: () => app.quit() },
   ]);
   tray.setContextMenu(contextMenu);
@@ -260,23 +279,40 @@ app.whenReady().then(async () => {
   createWindow();
 
   try {
-    console.log("[main] app ready -> fetch tuần hiện tại và tuần sau");
+    console.log("[main] app ready -> clear & fetch tuần hiện tại và tuần sau");
+    await clearAllSchedules();
     await getSchedule(0);
     await getSchedule(1);
     console.log("[main] fetch ban đầu ok!");
     win?.webContents.send("reload");
   } catch (err) {
     console.error("[main] getSchedule initial fail:", err);
-    if (String(err).includes("Cookie hết hạn")) {
+    const msg = String(err || "");
+    if (msg.includes("Cookie hết hạn") || msg.includes("No cookies")) {
       win?.webContents.send(
         "status",
         "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại."
       );
       win?.webContents.send("login-required");
+    } else {
+      win?.webContents.send("status", "Không tải được lịch.");
     }
   }
 
-  autoUpdater.checkForUpdates().catch(() => {});
+  autoUpdater
+    .checkForUpdates()
+    .then((result) => {
+      if (
+        result?.updateInfo?.version &&
+        result.updateInfo.version !== app.getVersion()
+      ) {
+        win?.webContents.send(
+          "toast-update",
+          `Đã có bản cập nhật mới (v${result.updateInfo.version}). Bấm để cập nhật ngay.`
+        );
+      }
+    })
+    .catch(() => {});
 
   function inActiveHours() {
     const h = new Date().getHours();
@@ -304,13 +340,6 @@ app.whenReady().then(async () => {
       console.error("[main] autoRefresh next week fail:", err);
     }
   }, 6 * 60 * 60 * 1000);
-
-  win.webContents.on("before-input-event", (event, input) => {
-    if (input.type === "keyDown" && input.key === "Escape") {
-      event.preventDefault();
-      if (win.isVisible()) win.hide();
-    }
-  });
 });
 
 app.on("window-all-closed", (e) => e.preventDefault());

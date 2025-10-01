@@ -73,15 +73,13 @@ function periodTime(p = []) {
   const b = periodsTime[p[p.length - 1]]?.[1];
   return a && b ? `${a} - ${b}` : "";
 }
-function normalizeType(str) {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "");
+function cleanRoom(room = "") {
+  return room
+    .replace(/^Phòng học\//i, "")
+    .replace(/^Phòng hiệu năng cao\s*/i, "");
 }
-function showToast(msg) {
-  createToast(msg);
+function showToast(msg, id = "default-toast") {
+  createToast(msg, { id });
 }
 
 if (window.statusAPI?.onStatus) {
@@ -165,25 +163,40 @@ function getWeekDays(firstDay, lastDay) {
   return days;
 }
 
-function cleanRoom(room = "") {
-  return room
-    .replace(/^Phòng học\//i, "")
-    .replace(/^Phòng hiệu năng cao\s*/i, "");
-}
-
 async function changeWeek(offset) {
+  const toastId = "week-toast";
   try {
-    const payload = await window.widgetAPI.fetchWeek(offset);
+    showToast("Đang tải...", toastId);
+
+    const payload = await window.widgetAPI.fetchWeek(
+      offset,
+      currentWeek.toISOString()
+    );
+
     if (!payload) {
-      showToast("Không có dữ liệu tuần này.");
+      showToast("Không có dữ liệu tuần này.", toastId);
       return;
     }
+
     if (payload.weekStart) {
       currentWeek = new Date(payload.weekStart);
       await render(window.dateAPI.weekKey(currentWeek));
+      showToast("Tải lịch thành công!", toastId);
     }
   } catch (err) {
-    console.warn("[changeWeek:B] fetch fail:", err);
+    showToast("Lỗi khi tải tuần: " + (err?.message ?? err), toastId);
+  }
+}
+
+function safeResize() {
+  const overlay = document.getElementById("loading-overlay");
+  if (overlay && overlay.style.display !== "none") return;
+
+  const body = document.querySelector(".shell");
+  if (body) {
+    const rect = body.getBoundingClientRect();
+    const newHeight = rect.height;
+    window.widgetAPI.resizeHeight(newHeight);
   }
 }
 
@@ -200,6 +213,20 @@ async function render(isoDate) {
     else if (hasCookies) {
       state = "expired";
       loginLabel = "Đăng nhập lại";
+    }
+
+    const currentWeekKey = window.dateAPI.weekKey(new Date());
+    const thisWeekKey = window.dateAPI.weekKey(isoDate);
+    if (currentWeekKey === thisWeekKey && payload) {
+      setTimeout(async () => {
+        try {
+          await window.widgetAPI.fetchWeek(-1);
+          await window.widgetAPI.fetchWeek(1);
+          console.log("[render] pre-fetched prev/next weeks");
+        } catch (e) {
+          console.warn("[render] pre-fetch failed:", e);
+        }
+      }, 100);
     }
 
     let metaHtml = "";
@@ -221,7 +248,7 @@ async function render(isoDate) {
         "vi-VN"
       )}<br/>`;
       metaHtml += `<span class="week-range" style="font-weight:bold;color:white">Tuần: 
-      ${firstDay.toLocaleDateString("vi-VN")} → ${lastDay.toLocaleDateString(
+      ${firstDay.toLocaleDateString("vi-VN")} -> ${lastDay.toLocaleDateString(
         "vi-VN"
       )}
     </span>`;
@@ -250,16 +277,22 @@ async function render(isoDate) {
                                   <div class="subject">${s.subject}</div>
                                   <div class="line period">
                                     Tiết ${periodSpan(s.periods)}
-                                    <span class="sep"> | </span>${periodTime(
-                                      s.periods
-                                    )}
+                                    <span class="sep"> | </span>${(function () {
+                                      const p = s.periods;
+                                      if (!Array.isArray(p) || p.length === 0)
+                                        return "";
+                                      const a = periodsTime[p[0]]?.[0];
+                                      const b =
+                                        periodsTime[p[p.length - 1]]?.[1];
+                                      return a && b ? `${a} - ${b}` : "";
+                                    })()}
                                     <span class="sep"> | </span>${s.session}
-                                    <span class="tag type-${s.type.toLowerCase()}">${
-                                s.type
-                              }</span>
+                                    <span class="tag type-${(
+                                      s.type || ""
+                                    ).toLowerCase()}">${s.type}</span>
                                   </div>
                                   <div class="line room">${cleanRoom(
-                                    s.room
+                                    s.room || ""
                                   )}</div>
                                   ${
                                     s.teacher
@@ -300,7 +333,13 @@ async function render(isoDate) {
             </div>
           </div>
         </div>
-        
+
+        <!-- body nằm giữa -->
+        <div class="body">
+          ${bodyHtml}
+        </div>
+
+        <!-- footer xuống cuối -->
         <div class="footer-bar">
           <div class="meta">${metaHtml}</div>
           <div class="week-nav">
@@ -308,9 +347,11 @@ async function render(isoDate) {
             <button id="btn-next-week">Sau →</button>
           </div>
         </div>
-
-        <div class="body">${bodyHtml}</div>
       </div>`;
+
+    requestAnimationFrame(() => {
+      safeResize();
+    });
 
     const btnUpdate = $("#btn-update");
     const btnLogin = $("#btn-login");
@@ -325,12 +366,8 @@ async function render(isoDate) {
 
     btnPrevWeek?.addEventListener("click", async () => {
       btnPrevWeek.disabled = true;
-      showToast("Vui lòng đợi...");
       try {
         await changeWeek(-1);
-        showToast("Tải lịch thành công!");
-      } catch (err) {
-        showToast("Lỗi khi tải tuần trước: " + (err?.message ?? err));
       } finally {
         btnPrevWeek.disabled = false;
       }
@@ -338,12 +375,8 @@ async function render(isoDate) {
 
     btnNextWeek?.addEventListener("click", async () => {
       btnNextWeek.disabled = true;
-      showToast("Vui lòng đợi...");
       try {
         await changeWeek(1);
-        showToast("Tải lịch thành công!");
-      } catch (err) {
-        showToast("Lỗi khi tải tuần sau: " + (err?.message ?? err));
       } finally {
         btnNextWeek.disabled = false;
       }
@@ -386,12 +419,18 @@ async function render(isoDate) {
               });
           }
         } else if (res?.error) {
-          showToast("Lỗi kiểm tra: " + res.error);
+          showToast("Lỗi kiểm tra: " + res.error, "check-update-toast");
         } else {
-          showToast(`Bạn đang dùng phiên bản mới nhất (v${res.version}).`);
+          showToast(
+            `Bạn đang dùng phiên bản mới nhất (v${res.version}).`,
+            "check-update-toast"
+          );
         }
       } catch (e) {
-        showToast("Lỗi kiểm tra cập nhật: " + (e?.message ?? e));
+        showToast(
+          "Lỗi kiểm tra cập nhật: " + (e?.message ?? e),
+          "check-update-toast"
+        );
       } finally {
         btnUpdate.textContent = old;
         btnUpdate.disabled = false;
@@ -401,12 +440,12 @@ async function render(isoDate) {
     btnLogin?.addEventListener("click", async () => {
       try {
         await window.widgetAPI?.login?.();
-        showToast("Đăng nhập thành công, lịch đã cập nhật!");
+        showToast("Đăng nhập thành công, lịch đã cập nhật!", "login-toast");
         btnLogin.style.display = "none";
         if (btnRefresh) btnRefresh.style.display = "";
         await render(window.dateAPI.weekKey(currentWeek));
       } catch (e) {
-        showToast("Đăng nhập thất bại: " + (e?.message ?? e));
+        showToast("Đăng nhập thất bại: " + (e?.message ?? e), "login-toast");
       }
     });
 
@@ -416,9 +455,13 @@ async function render(isoDate) {
       btnRefresh.textContent = "Đang tải...";
       try {
         await window.widgetAPI.refresh();
-        showToast("Lịch đã cập nhật!");
+        showToast("Lịch đã cập nhật!", "refresh-toast");
+        await render(window.dateAPI.weekKey(currentWeek));
       } catch (err) {
-        showToast("Không tải được dữ liệu: " + (err?.message ?? err));
+        showToast(
+          "Không tải được dữ liệu: " + (err?.message ?? err),
+          "refresh-toast"
+        );
       } finally {
         btnRefresh.textContent = old;
         btnRefresh.disabled = false;
@@ -430,7 +473,10 @@ async function render(isoDate) {
 
     if (window.widgetAPI?.onLoginRequired) {
       window.widgetAPI.onLoginRequired(() => {
-        showToast("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
+        showToast(
+          "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.",
+          "login-required-toast"
+        );
         const btnLogin = document.getElementById("btn-login");
         const btnRefresh = document.getElementById("btn-refresh");
         if (btnLogin) btnLogin.style.display = "";
@@ -456,8 +502,11 @@ async function render(isoDate) {
     if (overlay) {
       setTimeout(() => {
         overlay.style.opacity = "0";
-        setTimeout(() => (overlay.style.display = "none"), 300);
-      }, 800);
+        setTimeout(() => {
+          overlay.style.display = "none";
+          safeResize();
+        }, 300);
+      }, 2000);
     }
   } catch (e) {
     el.innerHTML = `<div class="empty">Có lỗi khi hiển thị: ${
@@ -469,7 +518,10 @@ async function render(isoDate) {
 window.addEventListener("DOMContentLoaded", async () => {
   if (window.widgetAPI?.onLoginRequired) {
     window.widgetAPI.onLoginRequired(() => {
-      showToast("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
+      showToast(
+        "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.",
+        "login-required-toast"
+      );
       const btnLogin = document.getElementById("btn-login");
       const btnRefresh = document.getElementById("btn-refresh");
       if (btnLogin) btnLogin.style.display = "";

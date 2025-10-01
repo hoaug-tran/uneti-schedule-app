@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { getStoreDir } from "./storePath.js";
-import { startOfWeek, weekKey } from "../utils/date.js";
+import { weekKey } from "../utils/date.js";
 import * as cheerio from "cheerio";
 import { parseScheduleFromFragment } from "./parseScheduleFromFragment.js";
 
@@ -53,6 +53,67 @@ async function postWeek(cookieHeader, body, label) {
   return res.text();
 }
 
+export async function clearAllSchedules() {
+  try {
+    const storeDir = getStoreDir();
+    await fs.mkdir(storeDir, { recursive: true });
+    const files = await fs.readdir(storeDir);
+    await Promise.all(
+      files
+        .filter((f) => f.startsWith("schedule-") && f.endsWith(".json"))
+        .map((f) => fs.rm(path.join(storeDir, f), { force: true }))
+    );
+    console.log("[clearAllSchedules] removed all schedule-*.json");
+  } catch (err) {
+    console.warn("[clearAllSchedules] fail:", err);
+  }
+}
+
+async function loadOffsetsFromFile(baseDate = new Date()) {
+  try {
+    const storeDir = getStoreDir();
+    const key = weekKey(baseDate);
+    const filePath = path.join(storeDir, `schedule-${key}.json`);
+    const raw = await fs.readFile(filePath, "utf8");
+    const json = JSON.parse(raw);
+    return json.offsets || null;
+  } catch {
+    return null;
+  }
+}
+
+async function processFragment(fragment, target, offsets) {
+  const data = parseScheduleFromFragment(fragment) || [];
+  console.log("[processFragment] parsed data length:", data.length);
+
+  const storeDir = getStoreDir();
+  await fs.mkdir(storeDir, { recursive: true });
+  await fs.writeFile(path.join(storeDir, "fragment.html"), fragment, "utf8");
+
+  const [dd, mm, yyyy] = target.split("/");
+  const weekStart = new Date(+yyyy, +mm - 1, +dd);
+  const key = weekKey(weekStart);
+  const filePath = path.join(storeDir, `schedule-${key}.json`);
+
+  await fs.writeFile(
+    filePath,
+    JSON.stringify(
+      {
+        updatedAt: Date.now(),
+        weekStart: weekStart.toISOString(),
+        data,
+        offsets,
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  console.log("[processFragment] wrote file:", filePath);
+
+  return { offsets, weekStart, data };
+}
+
 export async function getSchedule(offset = 0, baseDate = null) {
   console.log("[getSchedule] start offset:", offset, "baseDate:", baseDate);
 
@@ -78,28 +139,38 @@ export async function getSchedule(offset = 0, baseDate = null) {
       current: $frag("#firstDateOffWeek").val(),
       next: $frag("#firstDateNextOffWeek").val(),
     };
+
     console.log("[getSchedule] offsets:", lastOffsets);
 
     target = lastOffsets.current;
-    await clearWeekJson(target);
+    if (!target) {
+      console.warn("[getSchedule] target không hợp lệ:", target);
+      return null;
+    }
+
     return await processFragment(fragment, target, lastOffsets);
   }
 
-  if (!lastOffsets && !baseDate) {
-    console.warn("[getSchedule] chưa có lastOffsets, fallback tuần hiện tại");
-    return await getSchedule(0);
-  }
-
-  if (offset === -1) target = lastOffsets?.prev;
-  if (offset === 1) target = lastOffsets?.next;
-
-  if (!target && baseDate) {
+  if (baseDate) {
     const d = new Date(baseDate);
     d.setDate(d.getDate() + offset * 7);
     target = `${String(d.getDate()).padStart(2, "0")}/${String(
       d.getMonth() + 1
     ).padStart(2, "0")}/${d.getFullYear()}`;
-    console.log("[getSchedule] tự tính target:", target);
+    console.log("[getSchedule] tính target từ baseDate:", target);
+  } else {
+    if (!lastOffsets) {
+      lastOffsets = await loadOffsetsFromFile(new Date());
+      if (!lastOffsets) {
+        console.warn(
+          "[getSchedule] chưa có lastOffsets, fallback tuần hiện tại"
+        );
+        return await getSchedule(0);
+      }
+    }
+
+    if (offset === -1) target = lastOffsets?.prev;
+    if (offset === 1) target = lastOffsets?.next;
   }
 
   if (!target) {
@@ -120,49 +191,10 @@ export async function getSchedule(offset = 0, baseDate = null) {
     current: $frag("#firstDateOffWeek").val(),
     next: $frag("#firstDateNextOffWeek").val(),
   };
+
+  lastOffsets.current = target;
+
   console.log("[getSchedule] new offsets:", lastOffsets);
 
-  await clearWeekJson(target);
   return await processFragment(fragment, target, lastOffsets);
-}
-
-async function clearWeekJson(target) {
-  if (!target) return;
-  try {
-    const [dd, mm, yyyy] = target.split("/");
-    const weekStart = new Date(+yyyy, +mm - 1, +dd);
-    const key = weekKey(weekStart);
-    const filePath = path.join(getStoreDir(), `schedule-${key}.json`);
-    await fs.rm(filePath, { force: true });
-    console.log("[clearWeekJson] removed old file:", filePath);
-  } catch (err) {
-    console.warn("[clearWeekJson] fail:", err);
-  }
-}
-
-async function processFragment(fragment, target, offsets) {
-  const data = parseScheduleFromFragment(fragment) || [];
-  console.log("[processFragment] parsed data length:", data.length);
-
-  const storeDir = getStoreDir();
-  await fs.mkdir(storeDir, { recursive: true });
-  await fs.writeFile(path.join(storeDir, "fragment.html"), fragment, "utf8");
-
-  const [dd, mm, yyyy] = target.split("/");
-  const weekStart = new Date(+yyyy, +mm - 1, +dd);
-  const key = weekKey(weekStart);
-  const filePath = path.join(storeDir, `schedule-${key}.json`);
-
-  await fs.writeFile(
-    filePath,
-    JSON.stringify(
-      { updatedAt: Date.now(), weekStart: weekStart.toISOString(), data },
-      null,
-      2
-    ),
-    "utf8"
-  );
-  console.log("[processFragment] wrote file:", filePath);
-
-  return { offsets, weekStart, data };
 }

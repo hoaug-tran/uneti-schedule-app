@@ -54,31 +54,24 @@ contextBridge.exposeInMainWorld("scheduleAPI", {
   onReload: (cb) => ipcRenderer.on("reload", () => cb()),
 });
 
+contextBridge.exposeInMainWorld("statusAPI", {
+  onStatus: (cb) => ipcRenderer.on("status", (_, msg) => cb(msg)),
+});
+
 contextBridge.exposeInMainWorld("widgetAPI", {
   hide: () => ipcRenderer.invoke("widget:hide"),
   quit: () => ipcRenderer.invoke("widget:quit"),
   refresh: () => ipcRenderer.invoke("widget:refresh"),
   refreshWeek: (isoDate) => ipcRenderer.invoke("widget:refresh-week", isoDate),
-  fetchWeek: (offset) => ipcRenderer.invoke("widget:fetch-week", offset),
+  fetchWeek: (offset, baseIso) =>
+    ipcRenderer.invoke("widget:fetch-week", offset, baseIso),
   login: () => ipcRenderer.invoke("widget:login"),
   onLogin: (cb) => ipcRenderer.on("login-success", cb),
   onLoginRequired: (cb) => ipcRenderer.on("login-required", cb),
-});
-
-contextBridge.exposeInMainWorld("statusAPI", {
-  onStatus: (cb) => ipcRenderer.on("status", (_, msg) => cb(msg)),
-});
-
-contextBridge.exposeInMainWorld("updateAPI", {
-  check: () => ipcRenderer.invoke("app:check-update"),
-  install: () => ipcRenderer.invoke("app:install-update"),
-  confirmInstall: () => ipcRenderer.invoke("app:confirm-install"),
-  getVersion: () => ipcRenderer.invoke("app:get-version"),
-  onUpdateToast: (cb) => ipcRenderer.on("toast-update", (_, msg) => cb(msg)),
-
-  onProgress: (cb) => ipcRenderer.on("update:progress", (_, p) => cb(p)),
-  onDownloaded: (cb) => ipcRenderer.on("update:downloaded", cb),
-  onError: (cb) => ipcRenderer.on("update:error", (_, msg) => cb(msg)),
+  resizeHeight: (height) => {
+    console.log("[preload] invoke resizeHeight", height);
+    return ipcRenderer.invoke("window:resize-height", height);
+  },
 });
 
 contextBridge.exposeInMainWorld("dateAPI", {
