@@ -1,5 +1,15 @@
 import { startOfWeek } from "../app/utils/date.js";
 
+let appVersionValue = null;
+
+window.appVersionAPI?.onVersion?.((version) => {
+  console.log("[renderer] nhận app-version:", version);
+  appVersionValue = version;
+
+  const el = document.querySelector(".version-label");
+  if (el) el.textContent = `v${version}`;
+});
+
 const $ = (s, r = document) => r.querySelector(s);
 function setStatus(msg) {
   const el = $("#status");
@@ -206,6 +216,8 @@ async function render(isoDate) {
     const payload = await window.scheduleAPI?.load?.(isoDate);
     const hasCookies = await window.scheduleAPI?.cookiesExists?.();
 
+    const version = appVersionValue || (await window.appAPI.getVersion());
+
     let state = "first";
     let loginLabel = "Đăng nhập";
 
@@ -311,8 +323,6 @@ async function render(isoDate) {
             .join("")}
         </div>`;
     }
-
-    const version = await window.appAPI.getVersion();
 
     el.innerHTML = `
       <div class="shell">

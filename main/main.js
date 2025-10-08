@@ -1,3 +1,5 @@
+import fs from "fs/promises";
+import { getStoreDir } from "../app/fetcher/storePath.js";
 import { app } from "./bootstrap.js";
 import { BrowserWindow, Tray, nativeImage, ipcMain, Menu } from "electron";
 import path from "path";
@@ -7,6 +9,22 @@ import { showLoginWindow } from "../app/fetcher/loginWindow.js";
 import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
 const { autoUpdater } = pkg;
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  process.exit(0);
+}
+
+async function hasCookies() {
+  try {
+    const storeDir = getStoreDir();
+    const cookiePath = path.join(storeDir, "cookies.txt");
+    const stat = await fs.stat(cookiePath);
+    return stat.isFile();
+  } catch {
+    return false;
+  }
+}
 
 autoUpdater.autoDownload = false;
 
@@ -192,6 +210,7 @@ function createWindow() {
     height: 650,
     maxHeight: 900,
     minHeight: 600,
+    show: true,
     backgroundColor: "#141414",
     frame: false,
     resizable: true,
@@ -278,25 +297,26 @@ app.whenReady().then(async () => {
   await createTray();
   createWindow();
 
-  try {
-    console.log("[main] app ready -> clear & fetch tuần hiện tại và tuần sau");
-    await clearAllSchedules();
-    await getSchedule(0);
-    await getSchedule(1);
-    console.log("[main] fetch ban đầu ok!");
-    win?.webContents.send("reload");
-  } catch (err) {
-    console.error("[main] getSchedule initial fail:", err);
-    const msg = String(err || "");
-    if (msg.includes("Cookie hết hạn") || msg.includes("No cookies")) {
-      win?.webContents.send(
-        "status",
-        "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại."
-      );
-      win?.webContents.send("login-required");
-    } else {
-      win?.webContents.send("status", "Không tải được lịch.");
+  // win.hide();
+
+  const hasCookie = await hasCookies();
+
+  if (hasCookie) {
+    console.log("[main] Cookie tồn tại -> fetch lịch ngầm sau khi clear");
+
+    try {
+      await clearAllSchedules();
+      await new Promise((r) => setTimeout(r, 300));
+      await getSchedule(0);
+      await getSchedule(1);
+      console.log("[main] fetch ban đầu ok (ngầm)!");
+    } catch (err) {
+      console.warn("[main] fetch ngầm lỗi:", err.message);
     }
+  } else {
+    console.warn("[main] Không có cookie, yêu cầu đăng nhập lại");
+    win?.webContents.send("status", "Chưa đăng nhập, vui lòng đăng nhập.");
+    win?.webContents.send("login-required");
   }
 
   autoUpdater
