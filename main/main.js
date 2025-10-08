@@ -1,14 +1,18 @@
 import fs from "fs/promises";
-import { getStoreDir } from "../app/fetcher/storePath.js";
-import { app } from "./bootstrap.js";
-import { BrowserWindow, Tray, nativeImage, ipcMain, Menu } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getSchedule, clearAllSchedules } from "../app/fetcher/getSchedule.js";
-import { showLoginWindow } from "../app/fetcher/loginWindow.js";
+import { app, BrowserWindow, Tray, nativeImage, ipcMain, Menu } from "electron";
 import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
 const { autoUpdater } = pkg;
+
+import { getStoreDir } from "../app/fetcher/storePath.js";
+import { getSchedule, clearAllSchedules } from "../app/fetcher/getSchedule.js";
+import { showLoginWindow } from "../app/fetcher/loginWindow.js";
+
+autoUpdater.autoDownload = false;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -25,11 +29,6 @@ async function hasCookies() {
     return false;
   }
 }
-
-autoUpdater.autoDownload = false;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 let tray, win;
 const autoLauncher = new AutoLaunch({
@@ -48,7 +47,6 @@ ipcMain.handle("widget:refresh", async () => {
     win?.webContents.send("reload");
   } catch (err) {
     console.warn("[widget:refresh] fail:", err);
-
     const msg = String(err || "");
     if (msg.includes("Cookie hết hạn") || msg.includes("No cookies")) {
       win?.webContents.send(
@@ -71,12 +69,10 @@ ipcMain.handle("widget:quit", () => app.quit());
 
 ipcMain.handle("widget:login", async () => {
   try {
-    console.log("[IPC] widget:login -> mở cửa sổ login");
+    console.log("[IPC] widget:login : open login window");
     await showLoginWindow(win);
-    console.log("[IPC] widget:login -> gọi getSchedule(0)");
     await clearAllSchedules();
     await getSchedule(0);
-    console.log("[IPC] widget:login -> fetch thành công");
     win?.webContents.send("reload");
     win?.webContents.send("login-success");
 
@@ -91,8 +87,38 @@ ipcMain.handle("widget:login", async () => {
 });
 
 ipcMain.handle("app:check-update", async () => {
+  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+
+  if (isDev) {
+    console.log("[mock] skip real checkForUpdates (dev mode)");
+    return { update: false, version: app.getVersion() };
+  }
+
+  console.log("[autoUpdater] Checking for updates...");
+  const timeoutMs = 7000;
+
+  const withTimeout = (promise, ms) =>
+    Promise.race([
+      promise,
+      new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              timeout: true,
+            }),
+          ms
+        )
+      ),
+    ]);
+
   try {
-    const result = await autoUpdater.checkForUpdates();
+    const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
+
+    if (result.timeout) {
+      console.warn("[autoUpdater] checkForUpdates() timed out");
+      return { update: false, version: app.getVersion() };
+    }
+
     if (
       result?.updateInfo?.version &&
       result.updateInfo.version !== app.getVersion()
@@ -103,15 +129,51 @@ ipcMain.handle("app:check-update", async () => {
       );
       return { update: true, version: result.updateInfo.version };
     }
+
     return { update: false, version: app.getVersion() };
   } catch (e) {
-    console.error("check update error:", e);
+    console.error("[autoUpdater] check update error:", e);
     return { error: e?.message ?? String(e) };
   }
 });
 
+ipcMain.handle("app:install-update", async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return true;
+  } catch (e) {
+    console.error("install update error:", e);
+    return false;
+  }
+});
+
+ipcMain.handle("app:confirm-install", async () => {
+  try {
+    await clearAllSchedules();
+    app.removeAllListeners("window-all-closed");
+    app.quit();
+    autoUpdater.quitAndInstall(false, true);
+    return true;
+  } catch (e) {
+    console.error("confirm install error:", e);
+    return false;
+  }
+});
+
+ipcMain.handle("app:get-version", () => app.getVersion());
+
+ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
+  try {
+    console.log("[IPC] widget:fetch-week offset:", offset, "baseIso:", baseIso);
+    const data = await getSchedule(offset, baseIso || null);
+    return data;
+  } catch (err) {
+    console.warn("fetch-week error:", err);
+    return null;
+  }
+});
+
 ipcMain.handle("window:resize-height", (_, height) => {
-  console.log("[main] resize-height invoked with", height);
   if (win && !win.isDestroyed()) {
     const bounds = win.getBounds();
     const newHeight = Math.max(600, Math.min(900, Math.round(height)));
@@ -166,42 +228,6 @@ autoUpdater.on("error", (err) => {
   win?.webContents.send("update:error", err?.message ?? String(err));
 });
 
-ipcMain.handle("app:install-update", async () => {
-  try {
-    await autoUpdater.downloadUpdate();
-    return true;
-  } catch (e) {
-    console.error("install update error:", e);
-    return false;
-  }
-});
-
-ipcMain.handle("app:confirm-install", async () => {
-  try {
-    await clearAllSchedules();
-    app.removeAllListeners("window-all-closed");
-    app.quit();
-    autoUpdater.quitAndInstall(false, true);
-    return true;
-  } catch (e) {
-    console.error("confirm install error:", e);
-    return false;
-  }
-});
-
-ipcMain.handle("app:get-version", () => app.getVersion());
-
-ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
-  try {
-    console.log("[IPC] widget:fetch-week offset:", offset, "baseIso:", baseIso);
-    const data = await getSchedule(offset, baseIso || null);
-    return data;
-  } catch (err) {
-    console.warn("fetch-week error:", err);
-    return null;
-  }
-});
-
 function createWindow() {
   if (win && !win.isDestroyed()) return win;
 
@@ -218,7 +244,7 @@ function createWindow() {
     skipTaskbar: true,
     roundedCorners: true,
     webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
+      preload: path.join(__dirname, "preload.mjs"),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
@@ -249,18 +275,6 @@ function createWindow() {
   return win;
 }
 
-function showWindow() {
-  if (!win || win.isDestroyed()) return;
-  const pos = tray.getBounds();
-  const bounds = win.getBounds();
-  const width = bounds.width;
-  const height = bounds.height;
-  const x = Math.max(0, pos.x - width + 20);
-  const y = Math.max(0, pos.y - height - 10);
-  win.setBounds({ x, y, width, height });
-  win.showInactive();
-}
-
 async function createTray() {
   const iconPath = path.join(__dirname, "../app/assets/uneti.ico");
   let image = nativeImage.createFromPath(iconPath);
@@ -270,9 +284,7 @@ async function createTray() {
   tray.setToolTip("UNETI Lịch học");
 
   tray.on("click", () => {
-    if (!win || win.isDestroyed()) {
-      createWindow();
-    }
+    if (!win || win.isDestroyed()) createWindow();
     win.isVisible() ? win.hide() : showWindow();
   });
 
@@ -293,35 +305,43 @@ async function createTray() {
   tray.setContextMenu(contextMenu);
 }
 
+function showWindow() {
+  if (!win || win.isDestroyed()) return;
+  const pos = tray.getBounds();
+  const bounds = win.getBounds();
+  const width = bounds.width;
+  const height = bounds.height;
+  const x = Math.max(0, pos.x - width + 20);
+  const y = Math.max(0, pos.y - height - 10);
+  win.setBounds({ x, y, width, height });
+  win.showInactive();
+}
+
 app.whenReady().then(async () => {
   await createTray();
   createWindow();
 
-  // win.hide();
-
   const hasCookie = await hasCookies();
-
   if (hasCookie) {
-    console.log("[main] Cookie tồn tại -> fetch lịch ngầm sau khi clear");
-
+    console.log("[main] Cookie exists, start fetch after clear");
     try {
       await clearAllSchedules();
       await new Promise((r) => setTimeout(r, 300));
       await getSchedule(0);
       await getSchedule(1);
-      console.log("[main] fetch ban đầu ok (ngầm)!");
+      console.log("[main] fetching in background!");
     } catch (err) {
-      console.warn("[main] fetch ngầm lỗi:", err.message);
+      console.warn("[main] fetch in background fail:", err.message);
     }
   } else {
-    console.warn("[main] Không có cookie, yêu cầu đăng nhập lại");
+    console.warn("[main] not have cookies, must be login again");
     win?.webContents.send("status", "Chưa đăng nhập, vui lòng đăng nhập.");
     win?.webContents.send("login-required");
   }
 
-  autoUpdater
-    .checkForUpdates()
-    .then((result) => {
+  if (app.isPackaged) {
+    try {
+      const result = await autoUpdater.checkForUpdates();
       if (
         result?.updateInfo?.version &&
         result.updateInfo.version !== app.getVersion()
@@ -331,8 +351,10 @@ app.whenReady().then(async () => {
           `Đã có bản cập nhật mới (v${result.updateInfo.version}). Bấm để cập nhật ngay.`
         );
       }
-    })
-    .catch(() => {});
+    } catch (e) {
+      console.warn("[autoUpdater] initial check failed:", e.message);
+    }
+  }
 
   function inActiveHours() {
     const h = new Date().getHours();
@@ -342,7 +364,6 @@ app.whenReady().then(async () => {
   setInterval(async () => {
     if (!inActiveHours()) return;
     try {
-      console.log("[main] autoRefresh -> getSchedule(0) (tuần hiện tại)");
       await getSchedule(0);
       win?.webContents.send("reload");
     } catch (err) {
@@ -353,7 +374,6 @@ app.whenReady().then(async () => {
   setInterval(async () => {
     if (!inActiveHours()) return;
     try {
-      console.log("[main] autoRefresh -> getSchedule(1) (tuần sau)");
       await getSchedule(1);
       win?.webContents.send("reload");
     } catch (err) {

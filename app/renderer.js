@@ -216,7 +216,12 @@ async function render(isoDate) {
     const payload = await window.scheduleAPI?.load?.(isoDate);
     const hasCookies = await window.scheduleAPI?.cookiesExists?.();
 
-    const version = appVersionValue || (await window.appAPI.getVersion());
+    let version = "dev";
+    try {
+      version = appVersionValue || (await window.appAPI?.getVersion?.());
+    } catch {
+      version = appVersionValue || "dev";
+    }
 
     let state = "first";
     let loginLabel = "Đăng nhập";
