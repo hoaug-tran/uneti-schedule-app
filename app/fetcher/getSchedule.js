@@ -117,10 +117,39 @@ async function processFragment(fragment, target, offsets) {
 export async function getSchedule(offset = 0, baseDate = null) {
   console.log("[getSchedule] start offset:", offset, "baseDate:", baseDate);
 
-  const cookiesPath = path.join(getStoreDir(), "cookies.txt");
-  const cookies = await fs.readFile(cookiesPath, "utf8").catch(() => "");
-  if (!cookies) throw new Error("No cookies");
-  const cookieHeader = cookies.replace(/\r?\n/g, "");
+  let cookieHeader = "";
+
+  try {
+    const cookiesPath = path.join(getStoreDir(), "cookies.txt");
+    cookieHeader = (await fs.readFile(cookiesPath, "utf8")).replace(
+      /\r?\n/g,
+      ""
+    );
+  } catch {
+    cookieHeader = "";
+  }
+
+  if (!cookieHeader) {
+    try {
+      const sess = session.fromPartition("persist:uneti-session");
+      const cookies = await sess.cookies.get({
+        domain: "sinhvien.uneti.edu.vn",
+      });
+      if (cookies.length > 0) {
+        cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+        console.log(
+          `[getSchedule] recovered ${cookies.length} cookies from session`
+        );
+      } else {
+        console.warn("[getSchedule] no cookies in session persist");
+      }
+    } catch (e) {
+      console.warn("[getSchedule] failed to recover cookies:", e.message);
+    }
+  }
+
+  if (!cookieHeader) throw new Error("No cookies");
+
   console.log("[getSchedule] cookies ok, length:", cookieHeader.length);
 
   let target;
