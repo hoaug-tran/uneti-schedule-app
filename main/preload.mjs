@@ -51,8 +51,10 @@ contextBridge.exposeInMainWorld("scheduleAPI", {
   },
   cookiesExists: async () => {
     try {
-      const cookiesPath = await getCookiesFile();
-      return fs.existsSync(cookiesPath);
+      const storeDir = await getStoreDir();
+      const txt = path.join(storeDir, "cookies.txt");
+      const json = path.join(storeDir, "cookies.json");
+      return fs.existsSync(txt) || fs.existsSync(json);
     } catch {
       return false;
     }
@@ -97,4 +99,18 @@ contextBridge.exposeInMainWorld("updateAPI", {
 
 contextBridge.exposeInMainWorld("appAPI", {
   getVersion: () => ipcRenderer.invoke("app:get-version"),
+});
+
+contextBridge.exposeInMainWorld("scheduleAPI_ex", {
+  cookiesExists: async () => {
+    try {
+      const storeDir = await getStoreDir();
+      return (
+        fs.existsSync(path.join(storeDir, "cookies.json")) ||
+        fs.existsSync(path.join(storeDir, "cookies.txt"))
+      );
+    } catch {
+      return false;
+    }
+  },
 });

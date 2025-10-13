@@ -4,6 +4,7 @@ import { getStoreDir } from "./storePath.js";
 import { weekKey } from "../utils/date.js";
 import * as cheerio from "cheerio";
 import { parseScheduleFromFragment } from "./parseScheduleFromFragment.js";
+import { session } from "electron";
 
 let lastOffsets = null;
 
@@ -26,21 +27,38 @@ function withTimeout(promise, ms = 15000, label = "request") {
   });
 }
 
+async function buildCookieHeader() {
+  try {
+    const header = await fs.readFile(
+      path.join(getStoreDir(), "cookies.txt"),
+      "utf8"
+    );
+    const h = header.replace(/\r?\n/g, "").trim();
+    if (h) return h;
+  } catch {}
+  try {
+    const sess = session.fromPartition("persist:uneti-session");
+    const list = await sess.cookies.get({ domain: "sinhvien.uneti.edu.vn" });
+    if (list && list.length) {
+      return list.map((c) => `${c.name}=${c.value}`).join("; ");
+    }
+  } catch {}
+  return "";
+}
 async function postWeek(cookieHeader, body, label) {
   const res = await withTimeout(
     fetch("https://sinhvien.uneti.edu.vn/SinhVien/GetDanhSachLichTheoTuan", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        Cookie: cookieHeader,
         "X-Requested-With": "XMLHttpRequest",
+        Cookie: cookieHeader,
       },
       body,
     }),
     15000,
     label
   );
-
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(
@@ -51,6 +69,145 @@ async function postWeek(cookieHeader, body, label) {
     );
   }
   return res.text();
+}
+
+function mapSameSite(v) {
+  if (!v) return "unspecified";
+  const s = String(v).toLowerCase();
+  if (s.includes("lax")) return "lax";
+  if (s.includes("strict")) return "strict";
+  if (s.includes("none") || s.includes("no_restriction"))
+    return "no_restriction";
+  return "unspecified";
+}
+
+async function ensureSessionHasCookiesFromFile() {
+  const ses = session.fromPartition("persist:uneti-session");
+  const existing = await ses.cookies.get({ domain: "sinhvien.uneti.edu.vn" });
+  if (existing && existing.length > 0) return ses;
+  try {
+    const storeDir = getStoreDir();
+    const jsonPath = path.join(storeDir, "cookies.json");
+    const txtPath = path.join(storeDir, "cookies.txt");
+    const hasJson = await fs
+      .stat(jsonPath)
+      .then(() => true)
+      .catch(() => false);
+    if (hasJson) {
+      const arr = JSON.parse(await fs.readFile(jsonPath, "utf8"));
+      for (const c of arr) {
+        try {
+          await ses.cookies.set({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || "sinhvien.uneti.edu.vn",
+            path: c.path || "/",
+            secure: !!c.secure,
+            httpOnly: !!c.httpOnly,
+            expirationDate: c.expirationDate,
+            sameSite: mapSameSite(c.sameSite),
+            url: "https://sinhvien.uneti.edu.vn",
+          });
+        } catch {}
+      }
+      try {
+        await ses.flushStorageData();
+      } catch {}
+      return ses;
+    }
+    const hasTxt = await fs
+      .stat(txtPath)
+      .then(() => true)
+      .catch(() => false);
+    if (hasTxt) {
+      const header = (await fs.readFile(txtPath, "utf8")).replace(/\r?\n/g, "");
+      for (const kv of header.split(";")) {
+        const [name, ...rest] = kv.trim().split("=");
+        const value = (rest.join("=") || "").trim();
+        if (!name || !value) continue;
+        try {
+          await ses.cookies.set({
+            url: "https://sinhvien.uneti.edu.vn",
+            name,
+            value,
+          });
+        } catch {}
+      }
+      try {
+        await ses.flushStorageData();
+      } catch {}
+      return ses;
+    }
+  } catch {}
+  return ses;
+}
+
+function looksLoggedOut(html) {
+  try {
+    const $ = cheerio.load(html);
+    const hasOffsets =
+      $("#firstDateOffWeek").length > 0 ||
+      $("#firstDateNextOffWeek").length > 0 ||
+      $("#firstDatePrevOffWeek").length > 0;
+    if (hasOffsets) return false;
+    const hasLoginHint =
+      $('form[action*="dang-nhap"], form[action*="DangNhap"]').length > 0 ||
+      $('input[type="password"]').length > 0 ||
+      html.toLowerCase().includes("đăng nhập");
+    return hasLoginHint;
+  } catch {
+    return false;
+  }
+}
+
+function dmyToDate(s) {
+  const [dd, mm, yyyy] = s.split("/").map((n) => parseInt(n, 10));
+  return new Date(yyyy, mm - 1, dd);
+}
+function dateToDMY(d) {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+function extractOffsets(html) {
+  const $ = cheerio.load(html);
+  let prev =
+    $("#firstDatePrevOffWeek").val() ||
+    $('input[name="firstDatePrevOffWeek"]').val() ||
+    null;
+  let current =
+    $("#firstDateOffWeek").val() ||
+    $('input[name="firstDateOffWeek"]').val() ||
+    null;
+  let next =
+    $("#firstDateNextOffWeek").val() ||
+    $('input[name="firstDateNextOffWeek"]').val() ||
+    null;
+  if (current) return { prev, current, next };
+  // fallback: lấy từ chuỗi "dd/mm/yyyy - dd/mm/yyyy"
+  const m = html.match(/(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/);
+  if (m) {
+    const cur = m[1];
+    const d = dmyToDate(cur);
+    const p = new Date(d);
+    p.setDate(p.getDate() - 7);
+    const n = new Date(d);
+    n.setDate(n.getDate() + 7);
+    return { prev: dateToDMY(p), current: cur, next: dateToDMY(n) };
+  }
+  // fallback cuối: bắt đại ngày đầu tiên xuất hiện (ổn trong thực tế UNETI)
+  const any = html.match(/(\d{2}\/\d{2}\/\d{4})/);
+  if (any) {
+    const cur = any[1];
+    const d = dmyToDate(cur);
+    const p = new Date(d);
+    p.setDate(p.getDate() - 7);
+    const n = new Date(d);
+    n.setDate(n.getDate() + 7);
+    return { prev: dateToDMY(p), current: cur, next: dateToDMY(n) };
+  }
+  return { prev: null, current: null, next: null };
 }
 
 export async function clearAllSchedules() {
@@ -117,42 +274,36 @@ async function processFragment(fragment, target, offsets) {
 export async function getSchedule(offset = 0, baseDate = null) {
   console.log("[getSchedule] start offset:", offset, "baseDate:", baseDate);
 
-  let cookieHeader = "";
-
-  try {
-    const cookiesPath = path.join(getStoreDir(), "cookies.txt");
-    cookieHeader = (await fs.readFile(cookiesPath, "utf8")).replace(
-      /\r?\n/g,
-      ""
-    );
-  } catch {
-    cookieHeader = "";
-  }
-
-  if (!cookieHeader) {
-    try {
-      const sess = session.fromPartition("persist:uneti-session");
-      const cookies = await sess.cookies.get({
-        domain: "sinhvien.uneti.edu.vn",
-      });
-      if (cookies.length > 0) {
-        cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-        console.log(
-          `[getSchedule] recovered ${cookies.length} cookies from session`
-        );
-      } else {
-        console.warn("[getSchedule] no cookies in session persist");
-      }
-    } catch (e) {
-      console.warn("[getSchedule] failed to recover cookies:", e.message);
-    }
-  }
-
+  const cookieHeader = await buildCookieHeader();
   if (!cookieHeader) throw new Error("No cookies");
-
-  console.log("[getSchedule] cookies ok, length:", cookieHeader.length);
+  console.log("[getSchedule] cookie header length:", cookieHeader.length);
 
   let target;
+
+  if (baseDate) {
+    const d = new Date(baseDate);
+    if (Number.isFinite(d.getTime())) {
+      target = `${String(d.getDate()).padStart(2, "0")}/${String(
+        d.getMonth() + 1
+      ).padStart(2, "0")}/${d.getFullYear()}`;
+      console.log("[getSchedule] dùng baseDate làm target:", target);
+      const fragment = await postWeek(
+        cookieHeader,
+        `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
+        `week:${target}`
+      );
+      console.log("[getSchedule] fragment length:", fragment.length);
+      if (looksLoggedOut(fragment)) throw new Error("Cookie hết hạn");
+      lastOffsets = extractOffsets(fragment);
+      if (!lastOffsets.current) lastOffsets.current = target;
+      console.log("[getSchedule] offsets:", lastOffsets);
+      return await processFragment(fragment, lastOffsets.current, lastOffsets);
+    } else {
+      console.warn(
+        "[getSchedule] baseDate không hợp lệ, fallback offset logic"
+      );
+    }
+  }
 
   if (offset === 0) {
     const fragment = await postWeek(
@@ -161,13 +312,10 @@ export async function getSchedule(offset = 0, baseDate = null) {
       "week:current"
     );
     console.log("[getSchedule] fragment length:", fragment.length);
+    if (looksLoggedOut(fragment)) throw new Error("Cookie hết hạn");
 
-    const $frag = cheerio.load(fragment);
-    lastOffsets = {
-      prev: $frag("#firstDatePrevOffWeek").val(),
-      current: $frag("#firstDateOffWeek").val(),
-      next: $frag("#firstDateNextOffWeek").val(),
-    };
+    lastOffsets = extractOffsets(fragment);
+    console.log("[getSchedule] offsets:", lastOffsets);
 
     console.log("[getSchedule] offsets:", lastOffsets);
 
@@ -180,14 +328,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
     return await processFragment(fragment, target, lastOffsets);
   }
 
-  if (baseDate) {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + offset * 7);
-    target = `${String(d.getDate()).padStart(2, "0")}/${String(
-      d.getMonth() + 1
-    ).padStart(2, "0")}/${d.getFullYear()}`;
-    console.log("[getSchedule] tính target từ baseDate:", target);
-  } else {
+  if (!baseDate) {
     if (!lastOffsets) {
       lastOffsets = await loadOffsetsFromFile(new Date());
       if (!lastOffsets) {
@@ -197,9 +338,15 @@ export async function getSchedule(offset = 0, baseDate = null) {
         return await getSchedule(0);
       }
     }
-
     if (offset === -1) target = lastOffsets?.prev;
     if (offset === 1) target = lastOffsets?.next;
+  } else {
+    const d = new Date(baseDate);
+    d.setDate(d.getDate() + offset * 7);
+    target = `${String(d.getDate()).padStart(2, "0")}/${String(
+      d.getMonth() + 1
+    ).padStart(2, "0")}/${d.getFullYear()}`;
+    console.log("[getSchedule] tính target từ baseDate:", target);
   }
 
   if (!target) {
@@ -213,6 +360,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
     `week:${target}`
   );
   console.log("[getSchedule] fetched new fragment length:", fragment.length);
+  if (looksLoggedOut(fragment)) throw new Error("Cookie hết hạn");
 
   const $frag = cheerio.load(fragment);
   lastOffsets = {
@@ -221,7 +369,8 @@ export async function getSchedule(offset = 0, baseDate = null) {
     next: $frag("#firstDateNextOffWeek").val(),
   };
 
-  lastOffsets.current = target;
+  lastOffsets = extractOffsets(fragment);
+  if (!lastOffsets.current) lastOffsets.current = target;
 
   console.log("[getSchedule] new offsets:", lastOffsets);
 

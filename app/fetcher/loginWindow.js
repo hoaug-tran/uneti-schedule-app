@@ -1,6 +1,8 @@
 import { BrowserWindow } from "electron";
 import fs from "fs/promises";
+import path from "path";
 import { getStoreDir, getPaths } from "./storePath.js";
+
 const { COOKIE_TXT } = getPaths();
 
 export async function showLoginWindow(parent) {
@@ -29,6 +31,15 @@ export async function showLoginWindow(parent) {
 
         await fs.mkdir(getStoreDir(), { recursive: true });
         await fs.writeFile(COOKIE_TXT, cookieHeader, "utf8");
+        const cookieJsonPath = path.join(getStoreDir(), "cookies.json");
+        await fs.writeFile(
+          cookieJsonPath,
+          JSON.stringify(cookies, null, 2),
+          "utf8"
+        );
+        try {
+          await win.webContents.session.flushStorageData();
+        } catch {}
 
         console.log(`[loginWindow] Saved ${cookies.length} cookies.`);
         win.close();

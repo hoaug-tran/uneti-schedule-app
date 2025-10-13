@@ -531,6 +531,13 @@ async function render(isoDate) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  if (window.widgetAPI?.onLogin) {
+    window.widgetAPI.onLogin(async () => {
+      try {
+        await render(window.dateAPI.weekKey(currentWeek));
+      } catch {}
+    });
+  }
   if (window.widgetAPI?.onLoginRequired) {
     window.widgetAPI.onLoginRequired(() => {
       showToast(
