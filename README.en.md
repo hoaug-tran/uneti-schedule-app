@@ -80,6 +80,39 @@ Exam detection is automated based on schedule keywords. If an exam appears as a 
 1.  **Update** the app to the latest version (detection logic may change or break due to changes in the school portal).
 2.  Report the [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) on GitHub about the error with a screenshot of the raw schedule on the portal.
 
+## Build from Source
+
+If you want to build the application from source code:
+
+### Prerequisites
+*   **Node.js**: Version 20 or higher.
+*   **Git**: To clone the repository.
+
+### Steps
+
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/hoaug-tran/uneti-schedule-app.git
+    cd uneti-schedule-app
+    ```
+
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    # Or for yarn: yarn install
+    ```
+
+3.  **Run Development Mode**:
+    ```bash
+    npm run dev
+    ```
+
+4.  **Build for Production**:
+    ```bash
+    npm run build
+    ```
+    The built `.exe` file will be in the `dist` folder.
+
 ## Technology Stack
 
 *   **Core**: Electron, Node.js
@@ -93,4 +126,4 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 ---
 
-*This software was created to help UNETI students manage their study time more effectively.*
+*This software was created to help students easily track their class and exam schedules, even when the school website is down, frozen, or unresponsive.*

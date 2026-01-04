@@ -31,21 +31,21 @@
 > 
 > *Lưu ý quan trọng:* 
 > - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
-> - Mình đã chủ động **gửi file lên Microsoft để phân tích mã độc (Malware Analysis)** nhằm đưa app vào "danh sách trắng", tuy nhiên quá trình duyệt của họ cần thời gian.
+> - Mình đã chủ động **gửi file lên Microsoft để phân tích mã độc (Malware Analysis)** nhằm đưa app vào "whitelist", tuy nhiên quá trình duyệt của họ cần thời gian.
 
 ---
 
 ## Tính năng nổi bật
 
-*   **Desktop Widget**: Widget luôn nổi (tùy chọn), ghim trên màn hình để xem nhanh.
-*   **Lịch Thông Minh**: Tự động tải, phân tích và hiển thị lịch tuần hiện tại.
-*   **Hỗ trợ Lịch Thi**: Giao diện và màu sắc riêng biệt cho lịch thi để dễ theo dõi.
+*   **Desktop Widget**: Mở thời khoá biểu nhanh chóng, chỉ cần click vào icon trong Taskbar là xem được lịch.
+*   **Lịch thông minh**: Tự động tải, phân tích và hiển thị lịch tuần hiện tại.
+*   **Hiển thị chi tiết**: Giao diện và màu sắc riêng biệt cho lịch thi để dễ theo dõi.
 *   **Bảo mật & Riêng tư**:
     *   **Context Isolation**: Bật mặc định để đảm bảo an toàn.
     *   **Lưu trữ An toàn**: Cookie/Mật khẩu được mã hóa cấp hệ điều hành không lo bị leak(Keytar).
-    *   **Không theo dõi**: Không thu thập hay gửi dữ liệu cá nhân đi đâu. Để chắc chắn, vui lòng kiểm tra source code.
+    *   **Không theo dõi**: Không thu thập hay gửi dữ liệu cá nhân. Để chắc chắn, vui lòng kiểm tra source code hoặc tự build và chạy từ source code.
 *   **Nhẹ & Mượt**: Tối ưu tài nguyên, chạy ngầm ít tốn RAM.
-*   **Giao diện Động**: Chế độ Sáng/Tối/Tự động theo hệ thống.
+*   **Giao diện động**: Chế độ Sáng/Tối/Tự động theo hệ thống.
 *   **Đa ngôn ngữ**: Hỗ trợ Tiếng Việt và Tiếng Anh.
 *   **Chế độ Offline**: Tự động lưu cache để xem lịch khi mất mạng.
 
@@ -83,6 +83,39 @@ App tự động phát hiện lịch thi. Nếu lịch thi hiện như lịch h�
 1.  **Cập nhật** app lên bản mới nhất (thuật toán nhận diện có thể thay đổi ở các phiên bản hoặc bị hỏng do các thay đổi của trường).
 2.  Tạo [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) trên GitHub report về lỗi kèm ảnh chụp lỗi và ảnh chụp màn hình lịch gốc trên web trường ( nếu lịch bị sai ).
 
+## Chạy từ mã nguồn (Build from Source)
+
+Nếu bạn muốn tự build ứng dụng từ mã nguồn gốc:
+
+### Yêu cầu
+*   **Node.js**: Phiên bản 20 trở lên.
+*   **Git**: Để clone mã nguồn.
+
+### Các bước thực hiện
+
+1.  **Clone mã nguồn**:
+    ```bash
+    git clone https://github.com/hoaug-tran/uneti-schedule-app.git
+    cd uneti-schedule-app
+    ```
+
+2.  **Cài đặt thư viện**:
+    ```bash
+    npm install
+    # Hoặc nếu dùng yarn: yarn install
+    ```
+
+3.  **Chạy thử (Development Mode)**:
+    ```bash
+    npm run dev
+    ```
+
+4.  **Đóng gói (Build Production)**:
+    ```bash
+    npm run build
+    ```
+    File `.exe` sau khi build sẽ nằm trong thư mục `dist`.
+
 ## Công nghệ sử dụng
 
 *   **Core**: Electron, Node.js
@@ -96,4 +129,4 @@ Dự án được phát hành dưới giấy phép **MIT License**. Mã nguồn 
 
 ---
 
-*Phần mềm này được tạo ra với mục đích giúp sinh viên UNETI xem lịch học, lịch thi dễ dàng hơn mà không cần phải truy cập trang web của trường ( đôi khi web trường lag, treo, sập ) rất là khó chịu.*
+*Phần mềm này được tạo ra với mục đích giúp sinh viên UNETI xem lịch học, lịch thi dễ dàng hơn mà không cần phải truy cập trang web của trường ( đôi khi web trường lag, treo, sập rất là khó chịu ).*
