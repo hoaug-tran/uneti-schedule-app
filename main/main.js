@@ -1,4 +1,3 @@
-import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
@@ -16,9 +15,22 @@ import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
 const { autoUpdater } = pkg;
 
-import { getStoreDir } from "../app/fetcher/storePath.js";
+import { CONFIG } from "../app/config.js";
 import { getSchedule, clearAllSchedules } from "../app/fetcher/getSchedule.js";
 import { showLoginWindow } from "../app/fetcher/loginWindow.js";
+import {
+  bootstrapCookiesToSession,
+  attachCookieAutoPersist,
+  hasCookies,
+  getCookiePartition,
+} from "../app/fetcher/cookieManager.js";
+import {
+  startCookieRefreshService,
+  stopCookieRefreshService,
+} from "../app/fetcher/cookieRefresh.js";
+import { closeDatabase, loadSchedule } from "../app/fetcher/scheduleDb.js";
+
+import { logger } from "../app/utils/logger.js";
 
 autoUpdater.autoDownload = false;
 const __filename = fileURLToPath(import.meta.url);
@@ -29,151 +41,43 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-function attachCookieAutoPersist() {
-  const ses = session.fromPartition("persist:uneti-session");
-
-  // tránh ghi file quá dày
-  let debounce;
-  const persist = async () => {
-    try {
-      const all = await ses.cookies.get({ domain: "sinhvien.uneti.edu.vn" });
-      const dir = getStoreDir();
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(
-        path.join(dir, "cookies.json"),
-        JSON.stringify(all, null, 2),
-        "utf8"
-      );
-      await fs.writeFile(
-        path.join(dir, "cookies.txt"),
-        all.map((c) => `${c.name}=${c.value}`).join("; "),
-        "utf8"
-      );
-      console.log(`[cookies] persisted ${all.length} cookies`);
-    } catch (e) {
-      console.warn("[cookies] persist fail:", e?.message || e);
-    }
-  };
-
-  ses.cookies.on("changed", (_evt, cookie) => {
-    if (!cookie?.domain?.includes("uneti.edu.vn")) return;
-    clearTimeout(debounce);
-    debounce = setTimeout(persist, 300);
-  });
-}
-
-async function hasCookies() {
-  try {
-    const dir = getStoreDir();
-    const txt = path.join(dir, "cookies.txt");
-    const json = path.join(dir, "cookies.json");
-    const [a, b] = await Promise.all([
-      fs
-        .stat(txt)
-        .then((s) => s.isFile())
-        .catch(() => false),
-      fs
-        .stat(json)
-        .then((s) => s.isFile())
-        .catch(() => false),
-    ]);
-    return a || b;
-  } catch {
-    return false;
-  }
-}
-
 let tray, win;
 const autoLauncher = new AutoLaunch({
-  name: "UNETI Schedule Widget",
+  name: CONFIG.APP_NAME,
   path: process.execPath,
 });
 
-async function ensureCookiesBootstrapped() {
-  const ses = session.fromPartition("persist:uneti-session");
-  const exists = await ses.cookies.get({ domain: "sinhvien.uneti.edu.vn" });
-  if (exists && exists.length > 0) return;
-  try {
-    const storeDir = getStoreDir();
-    const jsonPath = path.join(storeDir, "cookies.json");
-    const txtPath = path.join(storeDir, "cookies.txt");
-    if (
-      await fs
-        .stat(jsonPath)
-        .then(() => true)
-        .catch(() => false)
-    ) {
-      const cookies = JSON.parse(await fs.readFile(jsonPath, "utf8"));
-      for (const c of cookies) {
-        try {
-          await ses.cookies.set({
-            name: c.name,
-            value: c.value,
-            domain: c.domain || "sinhvien.uneti.edu.vn",
-            path: c.path || "/",
-            secure: !!c.secure,
-            httpOnly: !!c.httpOnly,
-            expirationDate: c.expirationDate,
-            sameSite: c.sameSite || "no_restriction",
-            url: "https://sinhvien.uneti.edu.vn",
-          });
-        } catch {}
-      }
-      try {
-        await ses.flushStorageData();
-      } catch {}
-      console.log("[main] cookies restored from cookies.json");
-      return;
-    }
-    if (
-      await fs
-        .stat(txtPath)
-        .then(() => true)
-        .catch(() => false)
-    ) {
-      const header = (await fs.readFile(txtPath, "utf8")).replace(/\r?\n/g, "");
-      for (const kv of header.split(";")) {
-        const [name, ...rest] = kv.trim().split("=");
-        const value = (rest.join("=") || "").trim();
-        if (!name || !value) continue;
-        try {
-          await ses.cookies.set({
-            url: "https://sinhvien.uneti.edu.vn",
-            name,
-            value,
-          });
-        } catch {}
-      }
-      try {
-        await ses.flushStorageData();
-      } catch {}
-      console.log("[main] cookies restored from cookies.txt");
-    }
-  } catch {}
-}
-
 ipcMain.handle("get-userData-path", () => app.getPath("userData"));
+
+ipcMain.handle("schedule:cookies-exists", async () => {
+  return await hasCookies();
+});
+
+ipcMain.on("logger:log", (_, level, message) => {
+  if (logger[level]) {
+    logger[level](`[renderer] ${message}`);
+  } else {
+    logger.info(`[renderer] ${message}`);
+  }
+});
 
 ipcMain.handle("widget:refresh", async () => {
   try {
-    console.log("[IPC] widget:refresh -> clear & getSchedule(0)");
+    logger.debug("[IPC] widget:refresh");
     await clearAllSchedules();
     await getSchedule(0);
-    win?.webContents.send("status", "Lịch đã sẵn sàng");
+    win?.webContents.send("status", "Schedule ready");
     win?.webContents.send("reload");
   } catch (err) {
-    console.warn("[widget:refresh] fail:", err);
+    logger.warn(`[widget:refresh] fail: ${err?.message}`);
     const msg = String(err || "");
-    if (msg.includes("Cookie hết hạn") || msg.includes("No cookies")) {
-      win?.webContents.send(
-        "status",
-        "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại."
-      );
+    if (msg.includes("Cookie expired") || msg.includes("No cookies")) {
+      win?.webContents.send("status", "Session expired, please login again.");
       win?.webContents.send("login-required");
     } else {
       win?.webContents.send(
         "status",
-        "Không tải được lịch, đang dùng dữ liệu cũ."
+        "Failed to load schedule, using old data."
       );
       win?.webContents.send("reload");
     }
@@ -185,32 +89,42 @@ ipcMain.handle("widget:quit", () => app.quit());
 
 ipcMain.handle("widget:login", async () => {
   try {
-    console.log("[IPC] widget:login : open login window");
+    logger.debug("[IPC] widget:login START");
     await showLoginWindow(win);
+    logger.debug("[IPC] widget:login window closed, cookies saved");
+    startCookieRefreshService();
 
+    logger.debug("[IPC] widget:login sending login-success event");
     win?.webContents.send("login-success");
-    win?.webContents.send("status", "Đăng nhập thành công, đang tải lịch...");
+    win?.webContents.send("status", "Login success, loading schedule...");
+
+    logger.debug("[IPC] widget:login clearing schedules");
     await clearAllSchedules();
+
+    logger.debug("[IPC] widget:login fetching schedule");
     try {
       await getSchedule(0);
+      logger.debug("[IPC] widget:login fetched offset 0");
       await getSchedule(1);
+      logger.debug("[IPC] widget:login fetched offset 1");
     } catch (e) {
-      console.warn(
-        "[widget:login] getSchedule after login failed:",
-        e?.message || e
+      logger.warn(
+        `[widget:login] getSchedule after login failed: ${e?.message || e}`
       );
     }
 
-    win?.webContents.send("status", "Lịch đã sẵn sàng");
+    logger.debug("[IPC] widget:login sending status ready + reload");
+    win?.webContents.send("status", "Schedule ready");
     win?.webContents.send("reload");
 
     if (win && !win.isDestroyed()) {
       win.show();
       win.focus();
     }
+    logger.debug("[IPC] widget:login COMPLETE");
   } catch (err) {
-    console.error("[widget:login] fail:", err);
-    win?.webContents.send("status", "Đăng nhập thất bại.");
+    logger.error(`[IPC] widget:login error: ${err?.message}`);
+    win?.webContents.send("status", "Login failed.");
   }
 });
 
@@ -218,11 +132,11 @@ ipcMain.handle("app:check-update", async () => {
   const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
 
   if (isDev) {
-    console.log("[mock] skip real checkForUpdates (dev mode)");
+    logger.debug("[mock] skip checkForUpdates (dev mode)");
     return { update: false, version: app.getVersion() };
   }
 
-  console.log("[autoUpdater] Checking for updates...");
+  logger.info("[autoUpdater] Checking for updates...");
   const timeoutMs = 7000;
 
   const withTimeout = (promise, ms) =>
@@ -243,7 +157,7 @@ ipcMain.handle("app:check-update", async () => {
     const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
 
     if (result.timeout) {
-      console.warn("[autoUpdater] checkForUpdates() timed out");
+      logger.warn("[autoUpdater] checkForUpdates() timed out");
       return { update: false, version: app.getVersion() };
     }
 
@@ -253,14 +167,14 @@ ipcMain.handle("app:check-update", async () => {
     ) {
       win?.webContents.send(
         "toast-update",
-        `Có bản cập nhật mới (v${result.updateInfo.version}). Bấm để cập nhật ngay.`
+        `New update available (v${result.updateInfo.version}). Click to update.`
       );
       return { update: true, version: result.updateInfo.version };
     }
 
     return { update: false, version: app.getVersion() };
   } catch (e) {
-    console.error("[autoUpdater] check update error:", e);
+    logger.error(`[autoUpdater] check update error: ${e?.message}`);
     return { error: e?.message ?? String(e) };
   }
 });
@@ -270,7 +184,7 @@ ipcMain.handle("app:install-update", async () => {
     await autoUpdater.downloadUpdate();
     return true;
   } catch (e) {
-    console.error("install update error:", e);
+    logger.error(`install update error: ${e?.message}`);
     return false;
   }
 });
@@ -283,7 +197,7 @@ ipcMain.handle("app:confirm-install", async () => {
     autoUpdater.quitAndInstall(false, true);
     return true;
   } catch (e) {
-    console.error("confirm install error:", e);
+    logger.error(`confirm install error: ${e?.message}`);
     return false;
   }
 });
@@ -292,7 +206,7 @@ ipcMain.handle("app:get-version", () => app.getVersion());
 
 ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
   try {
-    console.log("[IPC] widget:fetch-week offset:", offset, "baseIso:", baseIso);
+    logger.debug(`[IPC] widget:fetch-week offset: ${offset} baseIso: ${baseIso}`);
     let adjustedIso = null;
     if (baseIso) {
       const d = new Date(baseIso);
@@ -305,7 +219,7 @@ ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
     const data = await getSchedule(offset, adjustedIso);
     return data;
   } catch (err) {
-    console.warn("fetch-week error:", err);
+    logger.warn(`fetch-week error: ${err?.message}`);
     return null;
   }
 });
@@ -313,7 +227,10 @@ ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
 ipcMain.handle("window:resize-height", (_, height) => {
   if (win && !win.isDestroyed()) {
     const bounds = win.getBounds();
-    const newHeight = Math.max(600, Math.min(900, Math.round(height)));
+    const newHeight = Math.max(
+      CONFIG.WINDOW_MIN_HEIGHT,
+      Math.min(CONFIG.WINDOW_MAX_HEIGHT, Math.round(height))
+    );
     win.setBounds({ ...bounds, height: newHeight });
     return { ok: true, height: newHeight };
   }
@@ -330,12 +247,12 @@ function resetStallWatch() {
     if (downloading) {
       win?.webContents.send(
         "update:error",
-        "Mạng không ổn định, tải cập nhật bị gián đoạn. Vui lòng kiểm tra kết nối và thử lại."
+        "Network unstable, update interrupted. Please check connection and retry."
       );
       downloading = false;
       lastTransferred = 0;
     }
-  }, 20000);
+  }, CONFIG.NETWORK_STALL_TIMEOUT_MS);
 }
 
 autoUpdater.on("download-progress", (p) => {
@@ -369,10 +286,10 @@ function createWindow() {
   if (win && !win.isDestroyed()) return win;
 
   win = new BrowserWindow({
-    width: 800,
-    height: 650,
-    maxHeight: 900,
-    minHeight: 600,
+    width: CONFIG.WINDOW_DEFAULT_WIDTH,
+    height: CONFIG.WINDOW_DEFAULT_HEIGHT,
+    maxHeight: CONFIG.WINDOW_MAX_HEIGHT,
+    minHeight: CONFIG.WINDOW_MIN_HEIGHT,
     show: true,
     backgroundColor: "#141414",
     frame: false,
@@ -391,10 +308,10 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "../app/index.html"));
 
   win.webContents.on("did-finish-load", () => {
-    console.log("[main] did-finish-load -> gửi reload");
+    logger.debug("[main] did-finish-load");
     win?.webContents.send(
       "status",
-      '<span class="loading-text">Đang tải</span>'
+      '<span class="loading-text">Loading</span>'
     );
     win?.webContents.send("reload");
   });
@@ -405,7 +322,7 @@ function createWindow() {
     clearTimeout(blurTimer);
     blurTimer = setTimeout(() => {
       if (win && !win.isDestroyed() && !win.isFocused()) win.hide();
-    }, 150);
+    }, CONFIG.WINDOW_BLUR_HIDE_DELAY_MS);
   });
 
   win.webContents.on("before-input-event", (event, input) => {
@@ -424,7 +341,7 @@ async function createTray() {
   if (image.isEmpty()) image = nativeImage.createEmpty();
 
   tray = new Tray(image);
-  tray.setToolTip("UNETI Lịch học");
+  tray.setToolTip("UNETI Schedule Widget");
 
   tray.on("click", () => {
     if (!win || win.isDestroyed()) {
@@ -439,7 +356,7 @@ async function createTray() {
   const enabled = await autoLauncher.isEnabled();
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "Khởi động cùng Windows",
+      label: "Start with Windows",
       type: "checkbox",
       checked: enabled,
       click: async (menuItem) => {
@@ -448,7 +365,7 @@ async function createTray() {
       },
     },
     { type: "separator" },
-    { label: "Thoát", click: () => app.quit() },
+    { label: "Exit", click: () => app.quit() },
   ]);
   tray.setContextMenu(contextMenu);
 }
@@ -460,42 +377,41 @@ function showWindow() {
   const bounds = win.getBounds();
   const width = bounds.width;
   const height = bounds.height;
-  const margin = 12;
+  const margin = CONFIG.TRAY_SHOW_POSITION_MARGIN;
+
   let x = Math.min(
     Math.max(display.workArea.x, cursor.x - Math.round(width / 2)),
     display.workArea.x + display.workArea.width - width
   );
-  let y = Math.min(
-    Math.max(display.workArea.y, cursor.y - height - margin),
-    display.workArea.y + display.workArea.height - height
-  );
+
+  let y = display.workArea.y + display.workArea.height - height - margin;
+
   win.setBounds({ x, y, width, height });
   win.show();
   try {
     win.focus();
-  } catch {}
+  } catch { }
 }
 
 app.whenReady().then(async () => {
   await createTray();
   createWindow();
-  await ensureCookiesBootstrapped();
+  await bootstrapCookiesToSession();
   attachCookieAutoPersist();
   const hasCookie = await hasCookies();
   if (hasCookie) {
-    console.log("[main] Cookie exists, start fetch after clear");
+    logger.info("[main] Cookies found, fetching schedule");
+    startCookieRefreshService();
     try {
-      await clearAllSchedules();
-      await new Promise((r) => setTimeout(r, 300));
       await getSchedule(0);
       await getSchedule(1);
-      console.log("[main] fetching in background!");
+      logger.info("[main] fetched schedule in background");
     } catch (err) {
-      console.warn("[main] fetch in background fail:", err.message);
+      logger.warn(`[main] fetch in background failed: ${err?.message}`);
     }
   } else {
-    console.warn("[main] not have cookies, must be login again");
-    win?.webContents.send("status", "Chưa đăng nhập, vui lòng đăng nhập.");
+    logger.warn("[main] no cookies, must login first");
+    win?.webContents.send("status", "Not logged in, please login.");
     win?.webContents.send("login-required");
   }
 
@@ -508,17 +424,17 @@ app.whenReady().then(async () => {
       ) {
         win?.webContents.send(
           "toast-update",
-          `Đã có bản cập nhật mới (v${result.updateInfo.version}). Bấm để cập nhật ngay.`
+          `New update available (v${result.updateInfo.version}). Click to update.`
         );
       }
     } catch (e) {
-      console.warn("[autoUpdater] initial check failed:", e.message);
+      logger.warn(`[autoUpdater] initial check failed: ${e?.message}`);
     }
   }
 
   function inActiveHours() {
     const h = new Date().getHours();
-    return h >= 6 && h <= 23;
+    return h >= CONFIG.ACTIVE_HOURS_START && h <= CONFIG.ACTIVE_HOURS_END;
   }
 
   setInterval(async () => {
@@ -528,9 +444,9 @@ app.whenReady().then(async () => {
       await getSchedule(1);
       win?.webContents.send("reload");
     } catch (err) {
-      console.error("[main] autoRefresh current week fail:", err);
+      logger.warn(`[main] autoRefresh current week failed: ${err?.message}`);
     }
-  }, 60 * 60 * 1000);
+  }, CONFIG.AUTO_REFRESH_INTERVAL_MS);
 
   setInterval(async () => {
     if (!inActiveHours()) return;
@@ -538,17 +454,17 @@ app.whenReady().then(async () => {
       await getSchedule(1);
       win?.webContents.send("reload");
     } catch (err) {
-      console.error("[main] autoRefresh next week fail:", err);
+      logger.warn(`[main] autoRefresh next week failed: ${err?.message}`);
     }
-  }, 6 * 60 * 60 * 1000);
+  }, CONFIG.AUTO_REFRESH_NEXT_WEEK_MS);
 
   powerMonitor.on("resume", async () => {
     try {
-      await ensureCookiesBootstrapped();
+      await bootstrapCookiesToSession();
       await getSchedule(0);
       win?.webContents.send("reload");
     } catch (e) {
-      console.warn("[powerMonitor] resume refresh fail:", e?.message || e);
+      logger.warn(`[powerMonitor] resume refresh failed: ${e?.message}`);
     }
   });
 });
@@ -557,9 +473,13 @@ app.on("window-all-closed", (e) => e.preventDefault());
 
 app.on("before-quit", async () => {
   try {
-    const ses = session.fromPartition("persist:uneti-session");
+    stopCookieRefreshService();
+    const ses = session.fromPartition(getCookiePartition());
     await ses.flushStorageData();
-  } catch {}
+    closeDatabase();
+  } catch (err) {
+    logger.warn(`[before-quit] cleanup failed: ${err?.message}`);
+  }
 });
 
 app.on("second-instance", () => {

@@ -1,9 +1,11 @@
 import { BrowserWindow } from "electron";
-import fs from "fs/promises";
-import path from "path";
-import { getStoreDir, getPaths } from "./storePath.js";
-
-const { COOKIE_TXT } = getPaths();
+import {
+  saveCookiesToSecureStorage,
+  saveCookieHeaderToTxt,
+  getCookiePartition,
+} from "./cookieManager.js";
+import { CONFIG } from "../config.js";
+import { logger } from "../utils/logger.js";
 
 export async function showLoginWindow(parent) {
   return new Promise((resolve, reject) => {
@@ -14,34 +16,25 @@ export async function showLoginWindow(parent) {
       modal: true,
       webPreferences: {
         contextIsolation: true,
-        partition: "persist:uneti-session",
+        partition: getCookiePartition(),
       },
     });
 
-    win.loadURL("https://sinhvien.uneti.edu.vn/sinh-vien-dang-nhap.html");
+    win.loadURL(CONFIG.UNETI_LOGIN_URL);
 
     win.webContents.on("did-navigate", async (_, url) => {
       if (url.includes("dashboard")) {
         const cookies = await win.webContents.session.cookies.get({
-          url: "https://sinhvien.uneti.edu.vn",
+          url: `https://${CONFIG.UNETI_DOMAIN}`,
         });
         const cookieHeader = cookies
           .map((c) => `${c.name}=${c.value}`)
           .join("; ");
 
-        await fs.mkdir(getStoreDir(), { recursive: true });
-        await fs.writeFile(COOKIE_TXT, cookieHeader, "utf8");
-        const cookieJsonPath = path.join(getStoreDir(), "cookies.json");
-        await fs.writeFile(
-          cookieJsonPath,
-          JSON.stringify(cookies, null, 2),
-          "utf8"
-        );
-        try {
-          await win.webContents.session.flushStorageData();
-        } catch {}
+        await saveCookiesToSecureStorage(cookies);
+        await saveCookieHeaderToTxt(cookieHeader);
 
-        console.log(`[loginWindow] Saved ${cookies.length} cookies.`);
+        logger.info(`[loginWindow] Saved ${cookies.length} cookies.`);
         win.close();
         resolve(cookieHeader);
       }

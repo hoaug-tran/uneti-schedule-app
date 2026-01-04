@@ -40,12 +40,33 @@ async function getCookiesFile() {
 contextBridge.exposeInMainWorld("scheduleAPI", {
   load: async (isoDate) => {
     try {
-      const file = await getScheduleFile(isoDate);
-      if (!fs.existsSync(file)) return null;
-      const raw = fs.readFileSync(file, "utf8");
-      return JSON.parse(raw);
+      const storeDir = await getStoreDir();
+      const schedulesFile = path.join(storeDir, "schedules.json");
+
+      if (!fs.existsSync(schedulesFile)) {
+        ipcRenderer.send("logger:log", "debug", "[scheduleAPI.load] schedules.json not found");
+        return null;
+      }
+
+      const raw = fs.readFileSync(schedulesFile, "utf8");
+      const schedules = JSON.parse(raw);
+
+      const d = isoDate ? new Date(isoDate) : new Date();
+      const key = weekKey(d);
+
+      const schedule = schedules[key];
+      if (!schedule) {
+        ipcRenderer.send("logger:log", "debug", `[scheduleAPI.load] no schedule for key: ${key}`);
+        return null;
+      }
+
+      return {
+        weekStart: schedule.week_start,
+        data: schedule.data,
+        updatedAt: schedule.updated_at
+      };
     } catch (err) {
-      console.error("[scheduleAPI.load] error:", err);
+      ipcRenderer.send("logger:log", "error", `[scheduleAPI.load] error: ${err}`);
       return null;
     }
   },

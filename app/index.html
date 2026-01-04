@@ -1,18 +1,26 @@
 <!DOCTYPE html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Lịch học UNETI</title>
-    <link rel="stylesheet" href="styles/style.css" />
-  </head>
-  <body>
-    <div id="loading-overlay">
-      <div class="spinner"></div>
-      <div class="loading-text">Đang tải</div>
-    </div>
 
-    <div id="status"></div>
-    <div id="content">Đang tải...</div>
-    <script type="module" src="renderer.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <title>Lịch học UNETI</title>
+  <link rel="stylesheet" href="styles/style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Đang tải</div>
+  </div>
+
+  <div id="status"></div>
+  <div id="lang-switcher" class="lang-switcher" style="display:none">
+    <button class="lang-btn" data-lang="vi" title="Tiếng Việt">VI</button>
+    <button class="lang-btn" data-lang="en" title="English">EN</button>
+  </div>
+  <div id="content">Đang tải...</div>
+  <script type="module" src="renderer.js"></script>
+</body>
+
 </html>

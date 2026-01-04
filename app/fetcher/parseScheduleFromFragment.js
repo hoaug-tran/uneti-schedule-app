@@ -69,12 +69,44 @@ export function parseScheduleFromFragment(html) {
             let type = "LT";
             const divClass = $(div).attr("class") || "";
             const style = $(div).attr("style") || "";
+            const dataBg = $(div).attr("data-bg") || "";
+            const $cell = $(cell);
+            const cellClass = $cell.attr("class") || "";
+            const cellStyle = $cell.attr("style") || "";
 
-            if (/lichthi/i.test(divClass) || style.includes("LichThi")) {
+            const hasExamClassInParents = $cell.hasClass("color-lichthi-chinhthuc") ||
+              $cell.parent().hasClass("color-lichthi-chinhthuc");
+
+            const isRegularClass = divClass.includes("color-lichhoc");
+
+            const isExamSchedule = !isRegularClass && (
+              (dataBg && dataBg.length > 0) ||
+              hasExamClassInParents ||
+              /color-lichthi/i.test(cellClass) ||
+              /lichthi/i.test(cellClass) ||
+              /lichthi/i.test(divClass) ||
+              /color-lichthi/i.test(divClass) ||
+              cellStyle.includes("#e8ffe1") ||
+              style.includes("#e8ffe1")
+            );
+
+            if (isExamSchedule) {
               type = "Thi";
-            } else if (style.includes("#71cb35")) {
+            } else if (style.includes("#71cb35") || cellStyle.includes("#71cb35")) {
               type = "TH";
-            } else if (style.includes("#92d6ff")) {
+            } else if (style.includes("#92d6ff") || cellStyle.includes("#92d6ff")) {
+              type = "Online";
+            } else {
+              type = "LT";
+            }
+
+
+
+            if (isExamSchedule) {
+              type = "Thi";
+            } else if (style.includes("#71cb35") || cellStyle.includes("#71cb35")) {
+              type = "TH";
+            } else if (style.includes("#92d6ff") || cellStyle.includes("#92d6ff")) {
               type = "Online";
             } else {
               type = "LT";
