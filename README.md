@@ -23,30 +23,32 @@
 
 *   **Desktop Widget**: Widget luôn nổi (tùy chọn), ghim trên màn hình để xem nhanh.
 *   **Lịch Thông Minh**: Tự động tải, phân tích và hiển thị lịch tuần hiện tại.
-*   **Hỗ trợ Lịch Thi**: Giao diện và màu sắc riêng biệt cho lịch thi, tránh nhầm lẫn.
+*   **Hỗ trợ Lịch Thi**: Giao diện và màu sắc riêng biệt cho lịch thi để dễ theo dõi.
 *   **Bảo mật & Riêng tư**:
     *   **Context Isolation**: Bật mặc định để đảm bảo an toàn.
-    *   **Lưu trữ An toàn**: Cookie/Mật khẩu được mã hóa cấp hệ điều hành (Keytar).
-    *   **Không theo dõi**: Không thu thập hay gửi dữ liệu cá nhân đi đâu.
+    *   **Lưu trữ An toàn**: Cookie/Mật khẩu được mã hóa cấp hệ điều hành không lo bị leak(Keytar).
+    *   **Không theo dõi**: Không thu thập hay gửi dữ liệu cá nhân đi đâu. Để chắc chắn, vui lòng kiểm tra source code.
 *   **Nhẹ & Mượt**: Tối ưu tài nguyên, chạy ngầm ít tốn RAM.
-*   **Giao diện Động**: Chế độ Sáng/Tối (Dark Mode) tự động theo hệ thống.
+*   **Giao diện Động**: Chế độ Sáng/Tối/Tự động theo hệ thống.
 *   **Đa ngôn ngữ**: Hỗ trợ Tiếng Việt và Tiếng Anh.
 *   **Chế độ Offline**: Tự động lưu cache để xem lịch khi mất mạng.
 
 ## Cài đặt
 
 1.  Truy cập trang **[Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)**.
-2.  Tải file cài đặt mới nhất: `uneti-schedule-widget-setup.exe`.
+2.  Tải file cài đặt mới nhất: `uneti-schedule-widget-x.x.x-setup.exe`.
 3.  Chạy file cài đặt. Ứng dụng sẽ tự khởi động.
 4.  Đăng nhập bằng **Tài khoản Sinh viên UNETI**.
+5.  Xem lịch và đối chiếu qua với lịch trên web trường.
 
 ## Hướng dẫn sử dụng
 
 *   **Điều hướng**: Dùng nút **Trước** / **Sau** để xem các tuần.
 *   **Làm mới**: Bấm nút **Làm mới** để tải lại dữ liệu mới nhất từ trường.
 *   **Cài đặt**: Bấm nút bánh răng để chỉnh Giao diện / Ngôn ngữ.
-*   **Ẩn Widệt**: Bấm nút **Thu nhỏ** hoặc phím `Esc` để ẩn xuống khay hệ thống.
+*   **Ẩn Widget**: Bấm nút **Thu nhỏ** hoặc phím `Esc` để ẩn xuống khay hệ thống hoặc đơn giản chỉ cần click ra bên ngoài.
 *   **Thoát hẳn**: Chuột phải vào icon ở khay hệ thống (System Tray) -> `Exit`.
+*   **Tự động khởi động**: Bật/tắt tùy chọn trong cài đặt để app khởi động cùng Windows bằng cách Chuột phải vào icon ở khay hệ thống (System Tray) -> `Khởi động cùng Windows / Start with Windows`.
 
 ## Khắc phục sự cố
 
@@ -63,7 +65,7 @@ Nếu bạn gặp thông báo này liên tục:
 ### Không hiện Lịch Thi
 App tự động phát hiện lịch thi. Nếu lịch thi hiện như lịch học thường:
 1.  **Cập nhật** app lên bản mới nhất (thuật toán nhận diện có thể thay đổi ở các phiên bản hoặc bị hỏng do các thay đổi của trường).
-2.  Tạo issue trên GitHub báo cáo về lỗi kèm ảnh chụp màn hình lịch gốc trên web trường.
+2.  Tạo [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) trên GitHub report về lỗi kèm ảnh chụp lỗi và ảnh chụp màn hình lịch gốc trên web trường ( nếu lịch bị sai ).
 
 ## Công nghệ sử dụng
 

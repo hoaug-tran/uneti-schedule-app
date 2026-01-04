@@ -6,7 +6,9 @@
 
 A modern, high-performance desktop widget for viewing student schedules at **UNETI** (University of Economic and Technical Industries). Built with **Electron** and **Node.js**, designed for stability, privacy, and ease of use.
 
-**[Read in Vietnamese / Đọc bằng tiếng Việt](README.md)**
+![alt text](image.png)
+
+**[Read in Vietnamese / Đọc bằng tiếng Việt](README.en.md)**
 
 ---
 
@@ -23,7 +25,7 @@ A modern, high-performance desktop widget for viewing student schedules at **UNE
 
 *   **Desktop Widget**: Always-on-top (optional), persistent widget for quick schedule checks.
 *   **Smart Schedule**: Automatically fetches, parses, and displays weekly schedules.
-*   **Exam Support**: Distinct styling for exam schedules to prevent missed tests.
+*   **Exam Support**: Distinct styling for exam schedules to easily identify.
 *   **Secure & Private**:
     *   **Context Isolation**: Enabled for maximum security.
     *   **Secure Storage**: Credentials/Cookies stored via OS-level encryption (Keytar).
@@ -36,7 +38,7 @@ A modern, high-performance desktop widget for viewing student schedules at **UNE
 ## Installation
 
 1.  Go to the **[Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)** page.
-2.  Download the latest installer: `uneti-schedule-widget-setup.exe`.
+2.  Download the latest installer: `uneti-schedule-widget-x.x.x-setup.exe`.
 3.  Run the installer. The app will launch automatically.
 4.  Log in with your **UNETI Student Account**.
 
@@ -47,6 +49,7 @@ A modern, high-performance desktop widget for viewing student schedules at **UNE
 *   **Settings**: Customize theme and language via the interface.
 *   **Minimize**: Click the **Minimize** button or press `Esc` to hide to system tray.
 *   **Quit**: Right-click the system tray icon -> `Exit`.
+*   **Auto Start**: Enable/Disable via the interface by right-clicking the system tray icon -> `Start with Windows`.
 
 ## Troubleshooting
 
@@ -63,7 +66,7 @@ If you constantly see "Session Expired":
 ### Missing Exam Schedule
 Exam detection is automated based on schedule keywords. If an exam appears as a regular class:
 1.  **Update** the app to the latest version (detection logic may change or break due to changes in the school portal).
-2.  Report the issue on GitHub about the error with a screenshot of the raw schedule on the portal.
+2.  Report the [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) on GitHub about the error with a screenshot of the raw schedule on the portal.
 
 ## Technology Stack
 
