@@ -19,6 +19,18 @@ A modern, high-performance desktop widget for viewing student schedules at **UNE
 >
 > The application functions by securely accessing the public student portal to retrieve schedule data for the authenticated user. Use this application at your own risk. The author(s) accept no responsibility for any errors, missed classes, or other issues resulting from the use of this software.
 
+> [!CAUTION]
+> **Regarding Virus/SmartScreen Warnings:**
+> This app is NOT a virus. Because I don't have the budget ($300 - $600/year) to purchase a Microsoft Digital Certificate, Windows SmartScreen will flag this as an "Unknown Publisher."
+> 
+> **The app is 100% safe and open-source.** You can verify the code yourself in this repository.
+>
+> **To run the app:**
+> 1. Click on **More info**.
+> 2. Click **Run anyway**.
+> 
+> *Note: If your antivirus (Windows Defender, etc.) automatically deletes the file, you may need to temporarily disable it or add the app to the exclusion list. I have already **submitted the file to Microsoft for malware analysis** to white-list it, but this process takes time.*
+
 ---
 
 ## Features
@@ -81,4 +93,4 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 ---
 
-*This software is a fan-made project created to help UNETI students manage their time better.*
+*This software was created to help UNETI students manage their study time more effectively.*

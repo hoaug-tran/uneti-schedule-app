@@ -19,6 +19,19 @@
 >
 > Ứng dụng hoạt động bằng cách truy cập cổng thông tin sinh viên public dưới danh nghĩa người dùng đã đăng nhập để tải dữ liệu lịch. Người dùng tự chịu trách nhiệm khi sử dụng. Tác giả không chịu trách nhiệm về bất kỳ lỗi hiển thị, lỡ lịch học/thi hay các vấn đề khác phát sinh từ việc sử dụng phần mềm.
 
+> [!CAUTION]
+> **Lưu ý về cảnh báo Virus / Windows SmartScreen:**
+> Ứng dụng này **KHÔNG PHẢI** là virus. Do mình không có kinh phí (khoảng 5-7 triệu VNĐ/năm) để duy trì chứng chỉ xác thực từ Microsoft, nên Windows sẽ tự động gắn cờ đây là "Phần mềm không xác định" (Unknown Publisher).
+> 
+> **App sạch 100% và mã nguồn mở.** Bạn có thể tự mình kiểm tra code ngay tại repository này để yên tâm.
+>
+> **Để mở ứng dụng:**
+> 1. Bấm vào **More info** (Thêm thông tin).
+> 2. Chọn **Run anyway** (Vẫn chạy).
+> 
+> *Lưu ý quan trọng:* > - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
+> - Mình đã chủ động **gửi file lên Microsoft để phân tích mã độc (Malware Analysis)** nhằm đưa app vào "danh sách trắng", tuy nhiên quá trình duyệt của họ cần thời gian.
+
 ---
 
 ## Tính năng nổi bật
