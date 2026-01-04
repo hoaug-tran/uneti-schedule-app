@@ -22,9 +22,9 @@ jobs:
         run: npm install
 
       - name: Build app (electron-builder)
-        run: npm run build
+        run: npm run build -- --publish never
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -77,4 +77,4 @@ jobs:
             ${{ env.INSTALLER }}
             ${{ env.YML }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
