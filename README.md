@@ -82,4 +82,4 @@ Dự án được phát hành dưới giấy phép **MIT License**. Mã nguồn 
 
 ---
 
-*Phần mềm này được tạo ra với mục đích giúp sinh viên UNETI quản lý thời gian học tập hiệu quả hơn.*
+*Phần mềm này được tạo ra với mục đích giúp sinh viên UNETI xem lịch học, lịch thi dễ dàng hơn mà không cần phải truy cập trang web của trường ( đôi khi web trường lag, treo, sập ) rất là khó chịu.*
