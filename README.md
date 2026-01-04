@@ -29,7 +29,8 @@
 > 1. Bấm vào **More info** (Thêm thông tin).
 > 2. Chọn **Run anyway** (Vẫn chạy).
 > 
-> *Lưu ý quan trọng:* > - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
+> *Lưu ý quan trọng:* 
+> - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
 > - Mình đã chủ động **gửi file lên Microsoft để phân tích mã độc (Malware Analysis)** nhằm đưa app vào "danh sách trắng", tuy nhiên quá trình duyệt của họ cần thời gian.
 
 ---
