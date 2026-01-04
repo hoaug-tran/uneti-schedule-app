@@ -6,7 +6,7 @@
 
 A modern, high-performance desktop widget for viewing student schedules at **UNETI** (University of Economic and Technical Industries). Built with **Electron** and **Node.js**, designed for stability, privacy, and ease of use.
 
-![alt text](image.png)
+![Widget screenshot](screenshot.png)
 
 **[Read in Vietnamese / Đọc bằng tiếng Việt](README.en.md)**
 

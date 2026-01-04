@@ -6,6 +6,8 @@
 
 Ứng dụng Widget Desktop hiện đại, hiệu năng cao giúp xem lịch học, lịch thi cho sinh viên **UNETI** (Đại học Kinh tế - Kỹ thuật Công nghiệp). Được xây dựng trên nền tảng **Electron**, tối ưu hóa cho sự ổn định, bảo mật và tiện dụng.
 
+![Ảnh giao diện widget](screenshot.png)
+
 **[Read in English / Đọc bằng tiếng Anh](README.en.md)**
 
 ---
