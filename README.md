@@ -1,6 +1,6 @@
 # UNETI Schedule Widget
 
-![Version](https://img.shields.io/badge/version-1.4.4-blue.svg?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.4.5-blue.svg?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)
 
