@@ -14,7 +14,12 @@ function setStatus(msg) {
 }
 
 
+
 function createToast(html, { id, duration = 3000, clickable = false, type = "info" } = {}) {
+  if (id !== "refresh-reminder-toast") {
+    hideToast("refresh-reminder-toast");
+  }
+
   let toast = id ? document.getElementById(id) : null;
   if (!toast) {
     toast = document.createElement("div");
