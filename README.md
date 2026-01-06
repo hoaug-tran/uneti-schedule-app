@@ -9,9 +9,23 @@
 
 ## Giới thiệu
 
-App này mình viết để tra cứu lịch học UNETI cho tiện. Thay vì phải mở browser, đăng nhập vào trang lịch của trường mỗi lần muốn xem, giờ chỉ cần click vào tray icon là xong.
+App này mình viết để tra cứu lịch học UNETI cho tiện. Thay vì phải mở browser, đăng nhập vào trang lịch của trường rồi điều phải bấm mấy phát nữa mỗi lần muốn xem, giờ chỉ cần click vào tray icon là xong.
 
 App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật. 
+
+## Một số hình ảnh của Widget
+
+<p align="center">
+  <img src="assets/img/screenshot1.png" width="100%" />
+  <br/>
+  <sub><i>Lịch học thường</i></sub>
+</p>
+
+<p align="center">
+  <img src="assets/img/screenshot2.png" width="100%" />
+  <br/>
+  <sub><i>Lịch thi</i></sub>
+</p>
 
 ## Tính năng chính
 
@@ -38,14 +52,51 @@ App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật.
 > [!IMPORTANT]
 > Lần đầu cần internet để đăng nhập. Sau đó app vẫn chạy được khi offline.
 
+## Lưu ý & Từ chối trách nhiệm
+
+> [!IMPORTANT]
+> **TỪ CHỐI TRÁCH NHIỆM**
+>
+> Dự án này là một sáng kiến mã nguồn mở độc lập và **KHÔNG** trực thuộc, được ủy quyền hay liên kết với **Trường Đại học Kinh tế - Kỹ thuật Công nghiệp (UNETI)**.
+>
+> Ứng dụng hoạt động bằng cách truy cập cổng thông tin sinh viên public dưới danh nghĩa người dùng đã đăng nhập để tải dữ liệu lịch. Người dùng tự chịu trách nhiệm khi sử dụng. Tác giả không chịu trách nhiệm về bất kỳ lỗi hiển thị, lỡ lịch học/thi hay các vấn đề khác phát sinh từ việc sử dụng phần mềm.
+
+> [!CAUTION]
+> **Lưu ý về cảnh báo Virus / Windows SmartScreen:**
+> Ứng dụng này KHÔNG chứa virus, malware, spyware hay bất kỳ mã độc nào. Do mình không có kinh phí (khoảng 5-7 triệu VNĐ/năm) để duy trì chứng chỉ xác thực từ Microsoft, nên Windows sẽ tự động gắn cờ đây là "Phần mềm không xác định" (Unknown Publisher).
+> 
+> **App sạch 100% và mã nguồn mở.** Bạn có thể tự mình kiểm tra code ngay tại repository này để yên tâm.
+>
+> **Để mở ứng dụng:**
+> 1. Bấm vào **More info** (Thêm thông tin).
+> 2. Chọn **Run anyway** (Vẫn chạy).
+> 
+> *Lưu ý quan trọng:* 
+> - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
+
+### Kết quả quét VirusTotal
+
+<p align="center">
+  <img src="assets/img/virustotal.png" width="100%" />
+</p>
+
+<p align="center">
+  <sub>
+    Kết quả quét VirusTotal tại thời điểm phát hành - 0/68 engine phát hiện mã độc  <br>
+    <a href="https://www.virustotal.com/gui/file/4eeffddde70899a3ea464f909e22ecc9007c096313862f1755039abd02cc438e/detection" target="_blank">
+      Xem chi tiết trên VirusTotal
+    </a>
+  </sub>
+</p>
+
 ## Sử dụng
 
 ### Đăng nhập
 
-Mở app lần đầu sẽ hiện cửa sổ đăng nhập. Nhập username/password UNETI như bình thường.
+Mở app lần đầu sẽ hiện cửa sổ đăng nhập. Nhập tài khoản / mật khẩu trang sinh viên UNETI như bình thường.
 
 > [!NOTE]
-> App chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu.
+> App chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu hay gửi đi đâu cả.
 
 ### Xem lịch
 
@@ -60,7 +111,7 @@ Click nút "Làm mới" để tải lịch mới nhất từ server. Nên làm m
 
 ### Tray Menu
 
-Chuột phải vào icon tray để mở menu:
+Chuột phải vào tray icon để mở menu:
 
 - **Khởi động cùng Windows**: Tự động chạy khi khởi động máy
 - **Xoá dữ liệu lịch**: Xoá lịch đã lưu (dùng khi lịch bị lỗi)
@@ -96,13 +147,13 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 
 ### Không đăng nhập được
 
-**Mô tả lỗi**: Click Login nhưng không mở cửa sổ đăng nhập.
+**Mô tả lỗi**: Click nút Đăng nhập nhưng không mở cửa sổ đăng nhập.
 
 **Thử các cách sau**:
 1. Kiểm tra kết nối internet
 2. Tắt firewall/antivirus tạm thời
-3. Restart app
-4. Chuột phải tray → Clear User Data → Thử lại
+3. Tắt app đi và mở lại
+4. Chuột phải tray → Xoá dữ liệu người dùng → Thử lại
 
 ### Lịch bị sai hoặc thiếu
 
@@ -115,7 +166,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 
 ### Chuyển tuần bị văng ra đăng nhập
 
-**Mô tả lỗi**: Khi chuyển tuần click vào Trước/Sau bị chuyển hướng về màn hình đăng nhập.
+**Mô tả lỗi**: Khi chuyển tuần click vào nút Trước/Sau bị chuyển hướng về màn hình đăng nhập.
 
 **Nguyên nhân**: Cookie hết hạn.
 
@@ -129,20 +180,20 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 1. Đợi 5-10 giây
 2. Click nút "Làm mới"
 3. Khởi động lại app
-4. Nếu vẫn bị, chuột phải tray → Thoát → Mở lại app
+4. Nếu vẫn bị, chuột phải vào icon tray → Thoát → Mở lại app
 
 ### App không tự động khởi động
 
-**Mô tả lỗi**: Dù đã bật "Start with Windows" nhưng không tự khởi động.
+**Mô tả lỗi**: Dù đã bật "Khởi động cùng Windows" nhưng không tự khởi động.
 
 **Thử các cách sau**:
-1. Chuột phải tray → Tắt "Start with Windows"
+1. Chuột phải vào tray icon → Tắt "Khởi động cùng Windows"
 2. Đợi 2 giây
-3. Chuột phải tray → Bật lại
+3. Chuột phải vào tray icon → Bật lại
 4. Restart máy để test
 
 > [!WARNING]
-> Nếu vẫn gặp lỗi, mở issue trên GitHub hoặc liên hệ qua email.
+> Nếu vẫn gặp lỗi, vui lòng mở [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) trên GitHub hoặc liên hệ qua email.
 
 ## Development
 
@@ -185,4 +236,4 @@ MIT License - xem file [LICENSE](LICENSE).
 
 ---
 
-Made with ❤️ by Trần Kính Hoàng
+Made with ❤️ by Trần Kính Hoàng - Sinh viên Trường Đại học Kinh tế - Kỹ thuật Công Nghiệp (UNETI).

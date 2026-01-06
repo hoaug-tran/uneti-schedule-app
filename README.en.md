@@ -13,6 +13,20 @@ I built this app to make checking UNETI schedules easier. Instead of opening a b
 
 The app auto-refreshes schedules every hour, so your schedule is always up to date.
 
+## Một số hình ảnh của Widget
+
+<p align="center">
+  <img src="assets/img/screenshot1.png" width="100%" />
+  <br/>
+  <sub><i>Regular schedule</i></sub>
+</p>
+
+<p align="center">
+  <img src="assets/img/screenshot2.png" width="100%" />
+  <br/>
+  <sub><i>Exam schedule</i></sub>
+</p>
+
 ## Main Features
 
 - Display weekly class schedule
@@ -37,6 +51,42 @@ The app auto-refreshes schedules every hour, so your schedule is always up to da
 
 > [!IMPORTANT]
 > Internet required for first login. After that, app works offline.
+
+## Notice and Disclaimer
+
+> [!IMPORTANT]
+> **DISCLAIMER**
+>
+> This project is an independent open-source initiative and is **NOT** affiliated with, endorsed by, or connected to **UNETI** (University of Economic and Technical Industries).
+>
+> The application functions by securely accessing the public student portal to retrieve schedule data for the authenticated user. Use this application at your own risk. The author(s) accept no responsibility for any errors, missed classes, or other issues resulting from the use of this software.
+
+> [!CAUTION]
+> **Regarding Virus/SmartScreen Warnings:**
+> This app is NOT a virus. Because I don't have the budget ($300 - $600/year) to purchase a Microsoft Digital Certificate, Windows SmartScreen will flag this as an "Unknown Publisher."
+> 
+> **The app is 100% safe and open-source.** You can verify the code yourself in this repository.
+>
+> **To run the app:**
+> 1. Click on **More info**.
+> 2. Click **Run anyway**.
+> 
+> *Note: If your antivirus (Windows Defender, etc.) automatically deletes the file, you may need to temporarily disable it or add the app to the exclusion list.*
+
+### VirusTotal result
+
+<p align="center">
+  <img src="assets/img/virustotal.png" width="100%" />
+</p>
+
+<p align="center">
+  <sub>
+    VirusTotal scan results at the time of release - 0/68 security engines reported no malware detection.<br/>
+    <a href="https://www.virustotal.com/gui/file/4eeffddde70899a3ea464f909e22ecc9007c096313862f1755039abd02cc438e/detection" target="_blank">
+      View the detailed VirusTotal report
+    </a>
+  </sub>
+</p>
 
 ## Usage
 
@@ -142,7 +192,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Crede
 4. Restart computer to test
 
 > [!WARNING]
-> If you still encounter errors, open an issue on GitHub or contact via email.
+> If you still encounter errors, please open an [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) on GitHub or contact me via email.
 
 ## Development
 
@@ -185,4 +235,4 @@ MIT License - see [LICENSE](LICENSE) file.
 
 ---
 
-Made with ❤️ by Trần Kính Hoàng
+Made with ❤️ by Trần Kính Hoàng - Student of the University of Economics - Technology for Industries (UNETI)
