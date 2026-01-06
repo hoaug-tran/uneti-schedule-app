@@ -164,10 +164,18 @@ async function processFragment(fragment, target, offsets) {
   const data = parseScheduleFromFragment(fragment) || [];
   logger.debug(`[processFragment] parsed data length: ${data.length}`);
 
+  if (data.length > 0) {
+    const subjects = [...new Set(data.map(d => d.subject))].join(", ");
+    const dayCount = [...new Set(data.map(d => d.day))].length;
+    logger.info(`[processFragment] Week ${target}: ${data.length} classes, ${dayCount} days, subjects: ${subjects}`);
+  } else {
+    logger.info(`[processFragment] Week ${target}: No classes (empty week)`);
+  }
+
   const weekStart = dmyToDate(target);
   const key = weekKey(weekStart);
 
-  saveSchedule(key, weekStart.toISOString(), data, offsets);
+  await saveSchedule(key, weekStart.toISOString(), data, offsets);
   logger.debug(`[processFragment] saved to database: ${key}`);
 
   return { offsets, weekStart, data };

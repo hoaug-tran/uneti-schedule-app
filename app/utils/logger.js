@@ -62,7 +62,10 @@ class Logger {
     }
 
     formatMessage(level, message, context) {
-        const timestamp = new Date().toISOString();
+        const now = new Date();
+        const vnTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+        const timestamp = vnTime.toISOString().replace('T', ' ').replace('Z', '');
+
         const levelStr = Object.keys(LOG_LEVELS).find(
             (k) => LOG_LEVELS[k] === level
         );
@@ -127,6 +130,15 @@ class Logger {
         } else {
             this.minLevel = level;
         }
+    }
+
+    getLogDir() {
+        return this.logDir;
+    }
+
+    getCurrentLogFile() {
+        this.updateLogFile();
+        return this.currentLogFile;
     }
 }
 

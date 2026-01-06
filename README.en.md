@@ -1,129 +1,188 @@
 # UNETI Schedule Widget
 
-![Version](https://img.shields.io/badge/version-1.4.4-blue.svg?style=flat-square)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)
+A desktop app for UNETI students to check class schedules quickly and conveniently.
 
-A modern, high-performance desktop widget for viewing student schedules at **UNETI** (University of Economic and Technical Industries). Built with **Electron** and **Node.js**, designed for stability, privacy, and ease of use.
-
-![Widget screenshot](screenshot.png)
-
-**[Read in Vietnamese / Đọc bằng tiếng Việt](README.en.md)**
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
 
 ---
 
-> [!IMPORTANT]
-> **DISCLAIMER**
->
-> This project is an independent open-source initiative and is **NOT** affiliated with, endorsed by, or connected to **UNETI** (University of Economic and Technical Industries).
->
-> The application functions by securely accessing the public student portal to retrieve schedule data for the authenticated user. Use this application at your own risk. The author(s) accept no responsibility for any errors, missed classes, or other issues resulting from the use of this software.
+## Introduction
 
-> [!CAUTION]
-> **Regarding Virus/SmartScreen Warnings:**
-> This app is NOT a virus. Because I don't have the budget ($300 - $600/year) to purchase a Microsoft Digital Certificate, Windows SmartScreen will flag this as an "Unknown Publisher."
-> 
-> **The app is 100% safe and open-source.** You can verify the code yourself in this repository.
->
-> **To run the app:**
-> 1. Click on **More info**.
-> 2. Click **Run anyway**.
-> 
-> *Note: If your antivirus (Windows Defender, etc.) automatically deletes the file, you may need to temporarily disable it or add the app to the exclusion list. I have already **submitted the file to Microsoft for malware analysis** to white-list it, but this process takes time.*
+I built this app to make checking UNETI schedules easier. Instead of opening a browser and logging into the school's schedule page every time, you can just click the tray icon.
 
----
+The app auto-refreshes schedules every hour, so your schedule is always up to date.
 
-## Features
+## Main Features
 
-*   **Desktop Widget**: Always-on-top (optional), persistent widget for quick schedule checks.
-*   **Smart Schedule**: Automatically fetches, parses, and displays weekly schedules.
-*   **Exam Support**: Distinct styling for exam schedules to easily identify.
-*   **Secure & Private**:
-    *   **Context Isolation**: Enabled for maximum security.
-    *   **Secure Storage**: Credentials/Cookies stored via OS-level encryption (Keytar).
-    *   **No Tracking**: No personal data is sent to third-party servers.
-*   **Efficient**: Low resource usage, optimized for background running.
-*   **Theming**: Beautiful Dark and Light modes (syncs with system).
-*   **Bilingual**: Full English and Vietnamese support.
-*   **Offline Capable**: Caches schedules for viewing without internet.
+- Display weekly class schedule
+- Auto-refresh: current week every 1 hour, next week every 6 hours
+- Works offline (uses cached schedule)
+- Dark/Light theme
+- Vietnamese/English
+- Tray icon for quick access
 
 ## Installation
 
-1.  Go to the **[Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)** page.
-2.  Download the latest installer: `uneti-schedule-widget-x.x.x-setup.exe`.
-3.  Run the installer. The app will launch automatically.
-4.  Log in with your **UNETI Student Account**.
+### Requirements
+
+- Windows 10/11 (64-bit)
+- About 150MB disk space
+
+### How to Install
+
+1. Download `.exe` file from [Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)
+2. Run installer
+3. Open app and login with UNETI account
+
+> [!IMPORTANT]
+> Internet required for first login. After that, app works offline.
 
 ## Usage
 
-*   **Navigation**: Use **Previous** / **Next** buttons to navigate weeks.
-*   **Refresh**: Click the **Refresh** icon to force an update from the server.
-*   **Settings**: Customize theme and language via the interface.
-*   **Minimize**: Click the **Minimize** button or press `Esc` to hide to system tray.
-*   **Quit**: Right-click the system tray icon -> `Exit`.
-*   **Auto Start**: Enable/Disable via the interface by right-clicking the system tray icon -> `Start with Windows`.
+### Login
+
+First time opening the app will show login window. Enter your UNETI username/password as usual.
+
+> [!NOTE]
+> App only stores encrypted session cookies on your computer, not your password.
+
+### View Schedule
+
+After login, schedule will auto-display. Use "← Previous" and "Next →" buttons to navigate weeks.
+
+### Refresh Schedule
+
+Click "Refresh" button to load latest schedule from server. You should refresh before important dates (exams, project deadlines...).
+
+> [!TIP]
+> App auto-refreshes every hour, but you should manually refresh before exam days to be sure.
+
+### Tray Menu
+
+Right-click tray icon to open menu:
+
+- **Start with Windows**: Auto-run on computer startup
+- **Clear Schedule Data**: Delete cached schedules (use when schedule is corrupted)
+- **Clear User Data (Logout)**: Complete logout
+- **View Logs**: View log file (for debugging errors)
+- **About App**: View version, developer info
+- **Exit**: Quit app
+
+## FAQ
+
+**Q: Is the app free?**  
+A: Yes, completely free and open-source.
+
+**Q: Does the app store passwords?**  
+A: No. App only stores encrypted session cookies on your computer, not passwords.
+
+**Q: Why do I need to login again?**  
+A: UNETI cookies have expiration. When expired, you need to login again.
+
+**Q: Is the schedule accurate?**  
+A: Yes. App fetches schedule directly from UNETI server and auto-refreshes every hour.
+
+**Q: Does the app work offline?**  
+A: Yes. When offline, app uses cached schedule. When online again, it auto-updates.
+
+**Q: Why is the app 150MB?**  
+A: Electron runtime takes ~80MB (standard for Electron apps). App code is only ~5MB.
+
+**Q: Where is data stored?**  
+A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Credential Manager.
 
 ## Troubleshooting
 
-### "Session Expired" Loop
-If you constantly see "Session Expired":
-1.  Click **Logout** (if available) or Restart the application.
-2.  Log in again to refresh your secure cookies.
+### Cannot Login
 
-### Schedule Not Updating
-*   Check your internet connection.
-*   The app caches data aggressively for offline use. Click **Refresh** to pull the latest data.
-*   If the school portal is down, the app will show the last cached version.
+**Symptoms**: Click Login but login window doesn't open.
 
-### Missing Exam Schedule
-Exam detection is automated based on schedule keywords. If an exam appears as a regular class:
-1.  **Update** the app to the latest version (detection logic may change or break due to changes in the school portal).
-2.  Report the [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) on GitHub about the error with a screenshot of the raw schedule on the portal.
+**Try these**:
+1. Check internet connection
+2. Temporarily disable firewall/antivirus
+3. Restart app
+4. Right-click tray → Clear User Data → Try again
 
-## Build from Source
+### Incorrect or Missing Schedule
 
-If you want to build the application from source code:
+**Symptoms**: Schedule doesn't match UNETI website.
 
-### Prerequisites
-*   **Node.js**: Version 20 or higher.
-*   **Git**: To clone the repository.
+**Try these**:
+1. Click "Refresh" button
+2. If still wrong: Right-click tray → Clear Schedule Data
+3. Check logs: Right-click tray → View Logs
 
-### Steps
+### Week Navigation Redirects to Login
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/hoaug-tran/uneti-schedule-app.git
-    cd uneti-schedule-app
-    ```
+**Symptoms**: Clicking Previous/Next redirects to login screen.
 
-2.  **Install dependencies**:
-    ```bash
-    npm install
-    # Or for yarn: yarn install
-    ```
+**Cause**: Cookies expired.
 
-3.  **Run Development Mode**:
-    ```bash
-    npm run dev
-    ```
+**Solution**: Login again.
 
-4.  **Build for Production**:
-    ```bash
-    npm run build
-    ```
-    The built `.exe` file will be in the `dist` folder.
+### "You are Offline" Toast Won't Disappear
 
-## Technology Stack
+**Symptoms**: Still shows offline warning despite having internet.
 
-*   **Core**: Electron, Node.js
-*   **Frontend**: HTML5, CSS3, JavaScript (ESM)
-*   **Security**: Electron `contextBridge`, `keytar`
-*   **Parser**: `cheerio`
+**Try these**:
+1. Wait 5-10 seconds
+2. Click "Refresh" button
+3. Restart app
+4. If still not working, try Right-click tray → Exit → Open app
+
+### App Doesn't Auto-Start
+
+**Symptoms**: "Start with Windows" enabled but doesn't auto-start.
+
+**Try these**:
+1. Right-click tray → Disable "Start with Windows"
+2. Wait 2 seconds
+3. Right-click tray → Enable again
+4. Restart computer to test
+
+> [!WARNING]
+> If you still encounter errors, open an issue on GitHub or contact via email.
+
+## Development
+
+### Tech Stack
+
+- Electron 33.2.1
+- JavaScript (ES Modules)
+- better-sqlite3 (database)
+- Cheerio (HTML parser)
+- Keytar (secure cookie storage)
+
+### Setup
+
+```bash
+git clone https://github.com/hoaug-tran/uneti-schedule-app.git
+cd uneti-schedule-app
+npm install
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+Build files will be in `dist/` folder.
 
 ## License
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file.
+
+## Contact
+
+**Trần Kính Hoàng (hoaug)**
+
+- GitHub: [@hoaug-tran](https://github.com/hoaug-tran)
+- Facebook: [hoaugtr](https://facebook.com/hoaugtr)
+- Email: hi@trkhoang.com
 
 ---
 
-*This software was created to help students easily track their class and exam schedules, even when the school website is down, frozen, or unresponsive.*
+Made with ❤️ by Trần Kính Hoàng

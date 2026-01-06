@@ -4,6 +4,7 @@ import { themeManager } from "../app/utils/theme.js";
 
 let appVersionValue = null;
 let currentWeek = startOfWeek(new Date());
+let preFetchedWeek = null;
 
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -12,7 +13,8 @@ function setStatus(msg) {
   if (el) el.innerHTML = msg ?? "";
 }
 
-function createToast(html, { id, duration = 3000, clickable = false } = {}) {
+
+function createToast(html, { id, duration = 3000, clickable = false, type = "info" } = {}) {
   let toast = id ? document.getElementById(id) : null;
   if (!toast) {
     toast = document.createElement("div");
@@ -20,6 +22,9 @@ function createToast(html, { id, duration = 3000, clickable = false } = {}) {
     if (id) toast.id = id;
     document.body.appendChild(toast);
   }
+  toast.classList.remove("toast-success", "toast-warning", "toast-error", "toast-info");
+  toast.classList.add(`toast-${type}`);
+
   toast.innerHTML = html;
   requestAnimationFrame(() => toast.classList.add("show"));
   if (!clickable && duration > 0) {
@@ -38,8 +43,8 @@ function hideToast(id) {
   setTimeout(() => toast.remove(), 250);
 }
 
-function showToast(msg, id = "default-toast") {
-  createToast(msg, { id });
+function showToast(msg, id = "default-toast", type = "info") {
+  createToast(msg, { id, type });
 }
 
 function fmtBytes(n) {
@@ -90,6 +95,33 @@ function getWeekDays(firstDay, lastDay) {
   return days;
 }
 
+function createSkeletonHTML() {
+  const locale = i18n.getLang() === "vi" ? "vi-VN" : "en-US";
+  const today = new Date();
+  const weekDays = [];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    weekDays.push(d);
+  }
+
+  return `
+    <div class="calendar" id="cal">
+      ${weekDays.map(d => `
+        <section class="day-col">
+          <header class="day-h">
+            <div class="skeleton skeleton-line" style="height: 18px; width: 80%; margin: 0 auto;"></div>
+          </header>
+          <div class="day-body loading">
+            <div class="skeleton-block"></div>
+          </div>
+        </section>
+      `).join('')}
+    </div>
+  `;
+}
+
 function safeResize() {
   const overlay = document.getElementById("loading-overlay");
   if (overlay && overlay.style.display !== "none") return;
@@ -104,6 +136,9 @@ function safeResize() {
 
 document.documentElement.lang = i18n.getLang();
 
+let isOnline = navigator.onLine;
+let offlineToastId = "offline-warning";
+
 window.addEventListener("DOMContentLoaded", async () => {
   try {
     appVersionValue = await window.appAPI?.getVersion?.();
@@ -116,6 +151,32 @@ window.addEventListener("DOMContentLoaded", async () => {
   registerIpcListeners();
 
   await render(window.dateAPI.weekKey(currentWeek));
+
+  isOnline = await window.networkAPI?.isOnline?.();
+  if (!isOnline) {
+    const hasCookies = await window.scheduleAPI?.cookiesExists?.();
+    if (hasCookies) {
+      setTimeout(() => {
+        createToast(i18n.t("offlineWarning"), { id: offlineToastId, duration: 0, clickable: true, type: "warning" });
+      }, 1000);
+    }
+  }
+
+  window.addEventListener("online", async () => {
+    window.loggerAPI?.info("[networkMonitor] online");
+    isOnline = true;
+    hideToast(offlineToastId);
+    createToast(i18n.t("onlineRestored"), { id: "online-restored", duration: 3000, type: "success" });
+  });
+
+  window.addEventListener("offline", async () => {
+    window.loggerAPI?.info("[networkMonitor] offline");
+    isOnline = false;
+    const hasCookies = await window.scheduleAPI?.cookiesExists?.();
+    if (hasCookies) {
+      createToast(i18n.t("offlineWarning"), { id: offlineToastId, duration: 0, clickable: true, type: "warning" });
+    }
+  });
 });
 
 function registerIpcListeners() {
@@ -126,6 +187,14 @@ function registerIpcListeners() {
     window.scheduleAPI.onReload(async () => {
       window.loggerAPI?.debug("onReload event received");
       await render(window.dateAPI.weekKey(currentWeek));
+
+      setTimeout(() => {
+        createToast(i18n.t("refreshReminder"), {
+          id: "refresh-reminder-toast",
+          duration: 6000,
+          type: "info"
+        });
+      }, 2000);
     });
   }
   if (window.widgetAPI?.onLogin) {
@@ -209,7 +278,7 @@ async function render(isoDate) {
   try {
     window.loggerAPI?.debug(`render start, isoDate: ${isoDate}`);
     const payload = await window.scheduleAPI?.load?.(isoDate);
-    window.loggerAPI?.debug(`payload loaded: ${payload ? "YES" : "NO"}`);
+    window.loggerAPI?.debug(`payload loaded: ${payload ? "YES" : "NO"}, data length: ${payload?.data?.length ?? "N/A"}`);
     const hasCookies = await window.scheduleAPI?.cookiesExists?.();
     window.loggerAPI?.debug(`hasCookies: ${hasCookies}`);
 
@@ -217,29 +286,35 @@ async function render(isoDate) {
     let state = "first";
     let loginLabel = i18n.t("login");
 
-    if (payload) state = "ok";
-    else if (hasCookies) {
+    if (payload && payload.weekStart) {
+      state = "ok";
+    } else if (hasCookies) {
       state = "expired";
       loginLabel = i18n.t("loginAgain");
     }
 
     if (!payload && !hasCookies)
       window.loggerAPI?.debug("no data, waiting for login");
-    else if (payload) window.loggerAPI?.debug("schedule loaded successfully");
+    else if (payload) window.loggerAPI?.debug(`schedule loaded successfully, ${payload.data?.length ?? 0} classes`);
 
     const currentWeekKey = window.dateAPI.weekKey(new Date());
     const thisWeekKey = window.dateAPI.weekKey(isoDate);
 
     if (currentWeekKey === thisWeekKey && payload) {
-      setTimeout(async () => {
-        try {
-          await window.widgetAPI.fetchWeek(-1);
-          await window.widgetAPI.fetchWeek(1);
-          window.loggerAPI?.debug("pre-fetched prev/next weeks");
-        } catch (e) {
-          window.loggerAPI?.warn(`pre-fetch failed: ${e}`);
-        }
-      }, 100);
+      if (preFetchedWeek !== currentWeekKey) {
+        preFetchedWeek = currentWeekKey;
+        setTimeout(async () => {
+          try {
+            await window.widgetAPI.fetchWeek(-1);
+            await window.widgetAPI.fetchWeek(1);
+            window.loggerAPI?.debug("pre-fetched prev/next weeks");
+          } catch (e) {
+            window.loggerAPI?.warn(`pre-fetch failed: ${e}`);
+          }
+        }, 100);
+      } else {
+        window.loggerAPI?.debug("pre-fetch skipped (already done for this week)");
+      }
     }
 
     let metaHtml = "";
@@ -266,7 +341,7 @@ async function render(isoDate) {
       metaHtml += `<span class="week-range" style="font-weight:bold;color:white">${i18n.t(
         "week"
       )}: 
-  ${firstDay.toLocaleDateString(locale)} -> ${lastDay.toLocaleDateString(
+  ${firstDay.toLocaleDateString(locale)} > ${lastDay.toLocaleDateString(
         locale
       )}
 </span>`;
@@ -438,7 +513,7 @@ async function render(isoDate) {
       btnRefresh.textContent = "...";
       try {
         await window.widgetAPI.refresh();
-      } catch (e) { /* ignore */ }
+      } catch (e) { }
       finally {
         btnRefresh.disabled = false;
         btnRefresh.textContent = old;
@@ -476,22 +551,126 @@ async function render(isoDate) {
   }
 }
 
+let weekChangeTimeout = null;
+
 async function changeWeek(offset) {
+  if (weekChangeTimeout) {
+    window.loggerAPI?.debug(`[changeWeek] Debouncing, ignoring rapid click`);
+    return;
+  }
+
   const toastId = "week-toast";
+  const btnPrev = $("#btn-prev-week");
+  const btnNext = $("#btn-next-week");
+  const btnRefresh = $("#btn-refresh");
+
+  window.loggerAPI?.debug(`[changeWeek] START offset=${offset}, currentWeek=${currentWeek.toISOString()}`);
+
+  if (btnPrev) btnPrev.disabled = true;
+  if (btnNext) btnNext.disabled = true;
+  if (btnRefresh) btnRefresh.disabled = true;
+  window.loggerAPI?.debug(`[changeWeek] Navigation buttons disabled`);
+
+  weekChangeTimeout = setTimeout(() => {
+    weekChangeTimeout = null;
+  }, 300);
+
   try {
-    showToast("Đang tải...", toastId);
-    const payload = await window.widgetAPI.fetchWeek(offset, currentWeek.toISOString());
-    if (!payload) {
-      showToast("Không có dữ liệu tuần này.", toastId);
+    const calendarEl = document.getElementById("cal");
+    if (calendarEl) {
+      calendarEl.outerHTML = createSkeletonHTML();
+      window.loggerAPI?.debug(`[changeWeek] Skeleton UI injected`);
+    }
+
+    if (!isOnline) {
+      window.loggerAPI?.warn(`[changeWeek] Offline mode, using cache only`);
+      const targetWeek = new Date(currentWeek);
+      targetWeek.setDate(targetWeek.getDate() + (offset * 7));
+      const cacheKey = window.dateAPI.weekKey(targetWeek);
+      window.loggerAPI?.debug(`[changeWeek] Cache lookup for key: ${cacheKey}`);
+      const cachedData = await window.scheduleAPI?.load?.(cacheKey);
+
+      if (cachedData && cachedData.weekStart) {
+        window.loggerAPI?.info(`[changeWeek] Cache HIT, showing cached data`);
+        currentWeek = new Date(cachedData.weekStart);
+        await render(window.dateAPI.weekKey(currentWeek));
+        showToast(i18n.t("offlineMode"), toastId, "warning");
+      } else {
+        window.loggerAPI?.warn(`[changeWeek] Cache MISS, no data available`);
+        showToast(i18n.t("noDataForWeek"), toastId, "error");
+      }
       return;
     }
-    if (payload.weekStart) {
-      currentWeek = new Date(payload.weekStart);
-      await render(window.dateAPI.weekKey(currentWeek));
-      showToast("Tải lịch thành công!", toastId);
+
+    showToast(i18n.t("fetchingWeek"), toastId, "info");
+    window.loggerAPI?.debug(`[changeWeek] Calling fetchWeek with offset=${offset}`);
+
+    const payload = await window.widgetAPI.fetchWeek(offset, currentWeek.toISOString());
+    window.loggerAPI?.debug(`[changeWeek] fetchWeek returned:`, payload ? `weekStart=${payload.weekStart}, data.length=${payload.data?.length}` : "null");
+
+    if (!payload || !payload.weekStart) {
+      window.loggerAPI?.warn(`[changeWeek] No payload from network, attempting cache fallback`);
+      const targetWeek = new Date(currentWeek);
+      targetWeek.setDate(targetWeek.getDate() + (offset * 7));
+      const cacheKey = window.dateAPI.weekKey(targetWeek);
+      window.loggerAPI?.debug(`[changeWeek] Cache lookup for key: ${cacheKey}`);
+      const cachedData = await window.scheduleAPI?.load?.(cacheKey);
+
+      if (cachedData && cachedData.weekStart) {
+        window.loggerAPI?.info(`[changeWeek] Cache HIT, showing cached data`);
+        currentWeek = new Date(cachedData.weekStart);
+        await render(window.dateAPI.weekKey(currentWeek));
+        showToast(i18n.t("offlineMode"), toastId, "warning");
+      } else {
+        window.loggerAPI?.warn(`[changeWeek] Cache MISS, no data available`);
+        showToast(i18n.t("noDataForWeek"), toastId, "error");
+      }
+      return;
     }
+
+    window.loggerAPI?.info(`[changeWeek] Network fetch SUCCESS, rendering new week`);
+    currentWeek = new Date(payload.weekStart);
+    await render(window.dateAPI.weekKey(currentWeek));
+
+    setTimeout(() => {
+      createToast(i18n.t("fetchSuccess"), { id: toastId, duration: 2500, type: "success" });
+    }, 100);
+
   } catch (err) {
-    showToast("Lỗi khi tải tuần: " + (err?.message ?? err), toastId);
+    window.loggerAPI?.error(`[changeWeek] ERROR: ${err?.message}`, err);
+
+    if (err?.message?.includes("Cookie expired") || err?.message?.includes("Session")) {
+      window.loggerAPI?.warn(`[changeWeek] Session expired, triggering login`);
+      showToast(i18n.t("sessionExpired"), toastId, "error");
+      throw err;
+    }
+
+    window.loggerAPI?.debug(`[changeWeek] Network error, attempting cache fallback`);
+    try {
+      const targetWeek = new Date(currentWeek);
+      targetWeek.setDate(targetWeek.getDate() + (offset * 7));
+      const cacheKey = window.dateAPI.weekKey(targetWeek);
+      window.loggerAPI?.debug(`[changeWeek] Cache lookup for key: ${cacheKey}`);
+      const cachedData = await window.scheduleAPI?.load?.(cacheKey);
+
+      if (cachedData && cachedData.weekStart) {
+        window.loggerAPI?.info(`[changeWeek] Cache fallback SUCCESS`);
+        currentWeek = new Date(cachedData.weekStart);
+        await render(window.dateAPI.weekKey(currentWeek));
+        showToast(i18n.t("offlineMode"), toastId, "warning");
+      } else {
+        window.loggerAPI?.warn(`[changeWeek] Cache fallback FAILED`);
+        showToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), toastId, "error");
+      }
+    } catch (cacheErr) {
+      window.loggerAPI?.error(`[changeWeek] Cache fallback exception:`, cacheErr);
+      showToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), toastId, "error");
+    }
+  } finally {
+    if (btnPrev) btnPrev.disabled = false;
+    if (btnNext) btnNext.disabled = false;
+    if (btnRefresh) btnRefresh.disabled = false;
+    window.loggerAPI?.debug(`[changeWeek] END, buttons re-enabled`);
   }
 }
 

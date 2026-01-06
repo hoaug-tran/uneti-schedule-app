@@ -49,7 +49,7 @@ body {
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -214,6 +214,12 @@ button:active {
   overflow-x: auto;
   overflow-y: auto;
   height: 500px;
+  opacity: 1;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.calendar.loading {
+  opacity: 0.6;
 }
 
 .calendar::-webkit-scrollbar {
@@ -226,6 +232,17 @@ button:active {
   flex-direction: column;
   border-radius: var(--radius-lg);
   min-height: 100%;
+  position: relative;
+}
+
+.day-col:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .day-h {
@@ -246,13 +263,27 @@ button:active {
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   min-height: 0;
   padding-right: 2px;
 }
 
 .day-body::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+
+.day-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.day-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.day-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .card {
@@ -409,7 +440,7 @@ button:active {
 
 .toast {
   position: fixed;
-  bottom: 70px;
+  bottom: 60px;
   right: 14px;
   left: auto;
   z-index: 9999;
@@ -425,6 +456,7 @@ button:active {
   max-width: fit-content;
   min-width: 200px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-left: 3px solid #3b82f6;
 }
 
 .toast.show {
@@ -435,21 +467,23 @@ button:active {
 .toast.update {
   cursor: pointer;
   max-width: 500px;
-  color: #e0e7ff;
-  border: 1px solid var(--accent);
-  background: var(--success-bg);
+  border-left: 3px solid #3b82f6;
 }
 
-.toast.info {
-  color: #dbeafe;
-  border: 1px solid var(--accent);
-  background: var(--success-bg);
+.toast-info {
+  border-left: 3px solid #3b82f6;
 }
 
-.toast.error {
-  color: #fecaca;
-  border: 1px solid #ef4444;
-  background: rgba(127, 29, 29, 0.5);
+.toast-success {
+  border-left: 3px solid #10b981;
+}
+
+.toast-warning {
+  border-left: 3px solid #f59e0b;
+}
+
+.toast-error {
+  border-left: 3px solid #ef4444;
 }
 
 .no-class {
@@ -538,4 +572,44 @@ button:active {
   100% {
     content: "...";
   }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #2a2a2a 25%, #3a3a3a 50%, #2a2a2a 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.skeleton-line {
+  height: 12px;
+  margin: 6px 0;
+}
+
+.skeleton-card {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--card);
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-block {
+  flex: 1;
+  min-height: 400px;
+  background: linear-gradient(90deg, #2a2a2a 25%, #3a3a3a 50%, #2a2a2a 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
 }

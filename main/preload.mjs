@@ -49,22 +49,33 @@ contextBridge.exposeInMainWorld("scheduleAPI", {
       }
 
       const raw = fs.readFileSync(schedulesFile, "utf8");
-      const schedules = JSON.parse(raw);
+
+      let schedules;
+      try {
+        schedules = JSON.parse(raw);
+      } catch (parseErr) {
+        ipcRenderer.send("logger:log", "error", `[scheduleAPI.load] Corrupt schedules.json, deleting: ${parseErr.message}`);
+        fs.unlinkSync(schedulesFile);
+        return null;
+      }
 
       const d = isoDate ? new Date(isoDate) : new Date();
       const key = weekKey(d);
 
       const schedule = schedules[key];
       if (!schedule) {
-        ipcRenderer.send("logger:log", "debug", `[scheduleAPI.load] no schedule for key: ${key}`);
+        ipcRenderer.send("logger:log", "warn", `[scheduleAPI.load] no schedule for key: ${key}`);
         return null;
       }
 
-      return {
+      const payload = {
         weekStart: schedule.week_start,
-        data: schedule.data,
+        data: schedule.data || [],
         updatedAt: schedule.updated_at
       };
+
+      ipcRenderer.send("logger:log", "debug", `[scheduleAPI.load] loaded key: ${key}, data.length: ${payload.data.length}`);
+      return payload;
     } catch (err) {
       ipcRenderer.send("logger:log", "error", `[scheduleAPI.load] error: ${err}`);
       return null;
@@ -134,4 +145,8 @@ contextBridge.exposeInMainWorld("scheduleAPI_ex", {
       return false;
     }
   },
+});
+
+contextBridge.exposeInMainWorld("networkAPI", {
+  isOnline: () => navigator.onLine,
 });

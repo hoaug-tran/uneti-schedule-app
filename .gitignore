@@ -20,7 +20,6 @@ build/
 test-results/
 
 app/store/
-*.json
 
 .DS_Store
 Thumbs.db

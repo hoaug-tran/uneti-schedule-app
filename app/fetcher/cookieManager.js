@@ -227,6 +227,24 @@ export async function hasCookies() {
   }
 }
 
+export async function areCookiesValid() {
+  try {
+    let cookies = await loadCookiesFromSecureStorage();
+    if (!cookies) {
+      cookies = await loadCookiesFromJsonFile();
+    }
+
+    if (!cookies || !Array.isArray(cookies)) {
+      return false;
+    }
+
+    const validCookies = cookies.filter(validateCookie);
+    return validCookies.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function buildCookieHeader() {
   try {
     const txt = await loadCookieHeaderFromTxt();

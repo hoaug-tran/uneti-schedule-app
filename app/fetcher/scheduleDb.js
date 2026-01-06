@@ -20,7 +20,14 @@ async function loadSchedulesFromDisk() {
     if (!exists) return {};
 
     const data = await fs.readFile(filePath, "utf8");
-    return JSON.parse(data) || {};
+
+    try {
+      return JSON.parse(data) || {};
+    } catch (parseErr) {
+      console.error("[scheduleDb] Corrupt schedules.json, deleting:", parseErr?.message);
+      await fs.unlink(filePath).catch(() => { });
+      return {};
+    }
   } catch (err) {
     console.warn("[scheduleDb] load failed:", err?.message);
     return {};
@@ -54,7 +61,16 @@ export function loadSchedule(weekKey) {
     const storeDir = getStoreDir();
     const filePath = path.join(storeDir, SCHEDULES_FILE);
     const raw = require("fs").readFileSync(filePath, "utf8");
-    const schedules = JSON.parse(raw);
+
+    let schedules;
+    try {
+      schedules = JSON.parse(raw);
+    } catch (parseErr) {
+      console.error(`[scheduleDb] Corrupt schedules.json for key ${weekKey}, deleting: ${parseErr.message}`);
+      require("fs").unlinkSync(filePath);
+      return null;
+    }
+
     return schedules[weekKey] || null;
   } catch {
     return null;

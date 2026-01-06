@@ -10,6 +10,8 @@ import {
   screen,
   powerMonitor,
   session,
+  shell,
+  dialog,
 } from "electron";
 import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
@@ -29,6 +31,7 @@ import {
   stopCookieRefreshService,
 } from "../app/fetcher/cookieRefresh.js";
 import { closeDatabase, loadSchedule } from "../app/fetcher/scheduleDb.js";
+import { i18nInstance as i18n } from "../app/utils/i18n.js";
 
 import { logger } from "../app/utils/logger.js";
 
@@ -64,6 +67,15 @@ ipcMain.on("logger:log", (_, level, message) => {
 ipcMain.handle("widget:refresh", async () => {
   try {
     logger.debug("[IPC] widget:refresh");
+
+    const cookiesValid = await hasCookies();
+    if (!cookiesValid) {
+      logger.warn("[widget:refresh] No cookies found, triggering login");
+      win?.webContents.send("status", "Session expired, please login again.");
+      win?.webContents.send("login-required");
+      return;
+    }
+
     await clearAllSchedules();
     await getSchedule(0);
     win?.webContents.send("status", "Schedule ready");
@@ -356,7 +368,7 @@ async function createTray() {
   const enabled = await autoLauncher.isEnabled();
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "Start with Windows",
+      label: i18n.t("trayStartWithWindows"),
       type: "checkbox",
       checked: enabled,
       click: async (menuItem) => {
@@ -365,7 +377,60 @@ async function createTray() {
       },
     },
     { type: "separator" },
-    { label: "Exit", click: () => app.quit() },
+    {
+      label: i18n.t("trayClearSchedule"),
+      click: async () => {
+        try {
+          await clearAllSchedules();
+          logger.info("[Tray] Schedule data cleared by user");
+          if (win && !win.isDestroyed()) {
+            win.webContents.send("login-required");
+          }
+        } catch (err) {
+          logger.error(`[Tray] Failed to clear schedule data: ${err?.message}`);
+        }
+      },
+    },
+    {
+      label: i18n.t("trayClearUserData"),
+      click: async () => {
+        try {
+          const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
+          await clearAllCookies();
+          await clearAllSchedules();
+          logger.info("[Tray] User data cleared by user");
+          win?.webContents.send("login-required");
+        } catch (err) {
+          logger.error(`[Tray] Failed to clear user data: ${err?.message}`);
+        }
+      },
+    },
+    {
+      label: i18n.t("trayViewLogs"),
+      click: () => {
+        const logFile = logger.getCurrentLogFile();
+        if (logFile) {
+          shell.openPath(logFile).catch((err) => {
+            logger.error(`[Tray] Failed to open log file: ${err?.message}`);
+          });
+        }
+      },
+    },
+    {
+      label: i18n.t("trayAbout"),
+      click: () => {
+        const appVersion = app.getVersion();
+        dialog.showMessageBox(win, {
+          type: "info",
+          title: i18n.t("aboutTitle"),
+          message: `Widget Lịch học UNETI v${appVersion}`,
+          detail: `${i18n.t("aboutDeveloper")}: Trần Kính Hoàng (hoaug)\n\n${i18n.t("aboutGitHub")}: hoaug-tran\nFacebook: hoaugtr\n${i18n.t("aboutEmail")}: hi@trkhoang.com\n\n© 2026 Trần Kính Hoàng. All rights reserved.`,
+          buttons: ["OK"]
+        });
+      },
+    },
+    { type: "separator" },
+    { label: i18n.t("trayExit"), click: () => app.quit() },
   ]);
   tray.setContextMenu(contextMenu);
 }
@@ -488,4 +553,14 @@ app.on("second-instance", () => {
   } else {
     createWindow();
   }
+});
+
+process.on("uncaughtException", (error) => {
+  logger.error(`[UNCAUGHT EXCEPTION] ${error.message}`, { stack: error.stack });
+  console.error("Uncaught Exception:", error);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error(`[UNHANDLED REJECTION] ${reason}`, { promise: String(promise) });
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
 });

@@ -1,132 +1,188 @@
-# UNETI Schedule Widget
+# Widget Lịch học UNETI
 
-![Version](https://img.shields.io/badge/version-1.4.5-blue.svg?style=flat-square)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)
+Ứng dụng desktop giúp sinh viên UNETI xem lịch học nhanh và tiện lợi.
 
-Ứng dụng Widget Desktop hiện đại, hiệu năng cao giúp xem lịch học, lịch thi cho sinh viên **UNETI** (Đại học Kinh tế - Kỹ thuật Công nghiệp). Được xây dựng trên nền tảng **Electron**, tối ưu hóa cho sự ổn định, bảo mật và tiện dụng.
-
-![Ảnh giao diện widget](screenshot.png)
-
-**[Read in English / Đọc bằng tiếng Anh](README.en.md)**
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
 
 ---
 
-> [!IMPORTANT]
-> **TỪ CHỐI TRÁCH NHIỆM**
->
-> Dự án này là một sáng kiến mã nguồn mở độc lập và **KHÔNG** trực thuộc, được ủy quyền hay liên kết với **Trường Đại học Kinh tế - Kỹ thuật Công nghiệp (UNETI)**.
->
-> Ứng dụng hoạt động bằng cách truy cập cổng thông tin sinh viên public dưới danh nghĩa người dùng đã đăng nhập để tải dữ liệu lịch. Người dùng tự chịu trách nhiệm khi sử dụng. Tác giả không chịu trách nhiệm về bất kỳ lỗi hiển thị, lỡ lịch học/thi hay các vấn đề khác phát sinh từ việc sử dụng phần mềm.
+## Giới thiệu
 
-> [!CAUTION]
-> **Lưu ý về cảnh báo Virus / Windows SmartScreen:**
-> Ứng dụng này **KHÔNG PHẢI** là virus. Do mình không có kinh phí (khoảng 5-7 triệu VNĐ/năm) để duy trì chứng chỉ xác thực từ Microsoft, nên Windows sẽ tự động gắn cờ đây là "Phần mềm không xác định" (Unknown Publisher).
-> 
-> **App sạch 100% và mã nguồn mở.** Bạn có thể tự mình kiểm tra code ngay tại repository này để yên tâm.
->
-> **Để mở ứng dụng:**
-> 1. Bấm vào **More info** (Thêm thông tin).
-> 2. Chọn **Run anyway** (Vẫn chạy).
-> 
-> *Lưu ý quan trọng:* 
-> - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
-> - Mình đã chủ động **gửi file lên Microsoft để phân tích mã độc (Malware Analysis)** nhằm đưa app vào "whitelist", tuy nhiên quá trình duyệt của họ cần thời gian.
+App này mình viết để tra cứu lịch học UNETI cho tiện. Thay vì phải mở browser, đăng nhập vào trang lịch của trường mỗi lần muốn xem, giờ chỉ cần click vào tray icon là xong.
 
----
+App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật. 
 
-## Tính năng nổi bật
+## Tính năng chính
 
-*   **Desktop Widget**: Mở thời khoá biểu nhanh chóng, chỉ cần click vào icon trong Taskbar là xem được lịch.
-*   **Lịch thông minh**: Tự động tải, phân tích và hiển thị lịch tuần hiện tại.
-*   **Hiển thị chi tiết**: Giao diện và màu sắc riêng biệt cho lịch thi để dễ theo dõi.
-*   **Bảo mật & Riêng tư**:
-    *   **Context Isolation**: Bật mặc định để đảm bảo an toàn.
-    *   **Lưu trữ An toàn**: Cookie/Mật khẩu được mã hóa cấp hệ điều hành không lo bị leak(Keytar).
-    *   **Không theo dõi**: Không thu thập hay gửi dữ liệu cá nhân. Để chắc chắn, vui lòng kiểm tra source code hoặc tự build và chạy từ source code.
-*   **Nhẹ & Mượt**: Tối ưu tài nguyên, chạy ngầm ít tốn RAM.
-*   **Giao diện động**: Chế độ Sáng/Tối/Tự động theo hệ thống.
-*   **Đa ngôn ngữ**: Hỗ trợ Tiếng Việt và Tiếng Anh.
-*   **Chế độ Offline**: Tự động lưu cache để xem lịch khi mất mạng.
+- Hiển thị lịch học theo tuần
+- Tự động làm mới: tuần hiện tại mỗi 1 giờ, tuần sau mỗi 6 giờ
+- Hoạt động offline (dùng lịch đã lưu)
+- Dark/Light theme
+- Tiếng Việt/English
+- Tray icon để truy cập nhanh
 
 ## Cài đặt
 
-1.  Truy cập trang **[Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)**.
-2.  Tải file cài đặt mới nhất: `uneti-schedule-widget-x.x.x-setup.exe`.
-3.  Chạy file cài đặt. Ứng dụng sẽ tự khởi động.
-4.  Đăng nhập bằng **Tài khoản Sinh viên UNETI**.
-5.  Xem lịch và đối chiếu qua với lịch trên web trường.
-
-## Hướng dẫn sử dụng
-
-*   **Điều hướng**: Dùng nút **Trước** / **Sau** để xem các tuần.
-*   **Làm mới**: Bấm nút **Làm mới** để tải lại dữ liệu mới nhất từ trường.
-*   **Cài đặt**: Bấm nút bánh răng để chỉnh Giao diện / Ngôn ngữ.
-*   **Ẩn Widget**: Bấm nút **Thu nhỏ** hoặc phím `Esc` để ẩn xuống khay hệ thống hoặc đơn giản chỉ cần click ra bên ngoài.
-*   **Thoát hẳn**: Chuột phải vào icon ở khay hệ thống (System Tray) -> `Exit`.
-*   **Tự động khởi động**: Bật/tắt tùy chọn trong cài đặt để app khởi động cùng Windows bằng cách Chuột phải vào icon ở khay hệ thống (System Tray) -> `Khởi động cùng Windows / Start with Windows`.
-
-## Khắc phục sự cố
-
-### Lỗi "Phiên hết hạn" liên tục
-Nếu bạn gặp thông báo này liên tục:
-1.  Bấm **Đăng xuất** hoặc Khởi động lại ứng dụng.
-2.  Đăng nhập lại để làm mới Cookie bảo mật.
-
-### Lịch không cập nhật
-*   Kiểm tra kết nối mạng.
-*   App có cơ chế lưu Cache để xem offline. Hãy bấm **Làm mới** để ép tải lại dữ liệu.
-*   Nếu cổng thông tin trường bảo trì, app sẽ hiện lịch sử cũ đã lưu.
-
-### Không hiện Lịch Thi
-App tự động phát hiện lịch thi. Nếu lịch thi hiện như lịch học thường:
-1.  **Cập nhật** app lên bản mới nhất (thuật toán nhận diện có thể thay đổi ở các phiên bản hoặc bị hỏng do các thay đổi của trường).
-2.  Tạo [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) trên GitHub report về lỗi kèm ảnh chụp lỗi và ảnh chụp màn hình lịch gốc trên web trường ( nếu lịch bị sai ).
-
-## Chạy từ mã nguồn (Build from Source)
-
-Nếu bạn muốn tự build ứng dụng từ mã nguồn gốc:
-
 ### Yêu cầu
-*   **Node.js**: Phiên bản 20 trở lên.
-*   **Git**: Để clone mã nguồn.
 
-### Các bước thực hiện
+- Windows 10/11 (64-bit)
+- Khoảng 150MB ổ cứng
 
-1.  **Clone mã nguồn**:
-    ```bash
-    git clone https://github.com/hoaug-tran/uneti-schedule-app.git
-    cd uneti-schedule-app
-    ```
+### Cách cài
 
-2.  **Cài đặt thư viện**:
-    ```bash
-    npm install
-    # Hoặc nếu dùng yarn: yarn install
-    ```
+1. Tải file `.exe` từ [Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)
+2. Chạy installer
+3. Mở app và đăng nhập bằng tài khoản UNETI
 
-3.  **Chạy thử (Development Mode)**:
-    ```bash
-    npm run dev
-    ```
+> [!IMPORTANT]
+> Lần đầu cần internet để đăng nhập. Sau đó app vẫn chạy được khi offline.
 
-4.  **Đóng gói (Build Production)**:
-    ```bash
-    npm run build
-    ```
-    File `.exe` sau khi build sẽ nằm trong thư mục `dist`.
+## Sử dụng
 
-## Công nghệ sử dụng
+### Đăng nhập
 
-*   **Core**: Electron, Node.js
-*   **Frontend**: HTML5, CSS3, JavaScript (ESM)
-*   **Security**: Electron `contextBridge`, `keytar`
-*   **Parser**: `cheerio`
+Mở app lần đầu sẽ hiện cửa sổ đăng nhập. Nhập username/password UNETI như bình thường.
 
-## Giấy phép
+> [!NOTE]
+> App chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu.
 
-Dự án được phát hành dưới giấy phép **MIT License**. Mã nguồn mở và miễn phí sử dụng. Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
+### Xem lịch
+
+Sau khi đăng nhập, lịch sẽ tự động hiển thị. Dùng nút "← Trước" và "Sau →" để chuyển tuần.
+
+### Làm mới lịch
+
+Click nút "Làm mới" để tải lịch mới nhất từ server. Nên làm mới trước những ngày quan trọng (thi, nộp đồ án...).
+
+> [!TIP]
+> App tự động làm mới mỗi giờ, nhưng bạn vẫn nên bấm "Làm mới" thủ công trước ngày thi để chắc chắn.
+
+### Tray Menu
+
+Chuột phải vào icon tray để mở menu:
+
+- **Khởi động cùng Windows**: Tự động chạy khi khởi động máy
+- **Xoá dữ liệu lịch**: Xoá lịch đã lưu (dùng khi lịch bị lỗi)
+- **Xoá dữ liệu người dùng (đăng xuất)**: Đăng xuất hoàn toàn
+- **Xem file log**: Xem file log (để debug khi có lỗi)
+- **Thông tin về app**: Xem version của app, thông tin của dev
+- **Thoát**: Thoát app
+
+## FAQ
+
+**Q: App có miễn phí không?**  
+A: Có, hoàn toàn miễn phí và open-source.
+
+**Q: App có lưu mật khẩu không?**  
+A: Không. App chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu.
+
+**Q: Tại sao nhiều khi phải đăng nhập lại?**  
+A: Cookie của trường (UNETI) với mỗi tài khoản của sinh viên có thời hạn. Khi hết hạn thì phải đăng nhập lại.
+
+**Q: Lịch có chính xác không?**  
+A: Có. App lấy lịch trực tiếp từ server UNETI và tự động làm mới mỗi giờ.
+
+**Q: App có hoạt động offline không?**  
+A: Có. Khi mất mạng, app sẽ dùng lịch đã lưu. Khi có mạng lại sẽ tự động cập nhật.
+
+**Q: Tại sao khi cài app nặng tận 150MB?**  
+A: Electron runtime chiếm ~80MB (chuẩn của Electron app). Code app chỉ ~5MB.
+
+**Q: Dữ liệu lưu ở đâu?**  
+A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows Credential Manager.
+
+## Troubleshooting
+
+### Không đăng nhập được
+
+**Mô tả lỗi**: Click Login nhưng không mở cửa sổ đăng nhập.
+
+**Thử các cách sau**:
+1. Kiểm tra kết nối internet
+2. Tắt firewall/antivirus tạm thời
+3. Restart app
+4. Chuột phải tray → Clear User Data → Thử lại
+
+### Lịch bị sai hoặc thiếu
+
+**Mô tả lỗi**: Lịch không khớp với trang web UNETI.
+
+**Thử các cách sau**:
+1. Click nút "Làm mới"
+2. Nếu vẫn sai: Chuột phải tray → Xoá dữ liệu lịch → Thử lại
+3. Kiểm tra log: Chuột phải tray → Xem file log (xem tên các buổi học có xuất hiện hay không)
+
+### Chuyển tuần bị văng ra đăng nhập
+
+**Mô tả lỗi**: Khi chuyển tuần click vào Trước/Sau bị chuyển hướng về màn hình đăng nhập.
+
+**Nguyên nhân**: Cookie hết hạn.
+
+**Giải pháp**: Đăng nhập lại.
+
+### Toast "Bạn đang Offline" không biến mất
+
+**Mô tả lỗi**: Dù đã có mạng nhưng vẫn hiện offline warning.
+
+**Thử các cách sau**:
+1. Đợi 5-10 giây
+2. Click nút "Làm mới"
+3. Khởi động lại app
+4. Nếu vẫn bị, chuột phải tray → Thoát → Mở lại app
+
+### App không tự động khởi động
+
+**Mô tả lỗi**: Dù đã bật "Start with Windows" nhưng không tự khởi động.
+
+**Thử các cách sau**:
+1. Chuột phải tray → Tắt "Start with Windows"
+2. Đợi 2 giây
+3. Chuột phải tray → Bật lại
+4. Restart máy để test
+
+> [!WARNING]
+> Nếu vẫn gặp lỗi, mở issue trên GitHub hoặc liên hệ qua email.
+
+## Development
+
+### Công nghệ sử dụng
+
+- Electron 33.2.1
+- JavaScript (ES Modules)
+- better-sqlite3 (database)
+- Cheerio (HTML parser)
+- Keytar (secure cookie storage)
+
+### Setup
+
+```bash
+git clone https://github.com/hoaug-tran/uneti-schedule-app.git
+cd uneti-schedule-app
+npm install
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+File build sẽ nằm trong folder `dist/`.
+
+## License
+
+MIT License - xem file [LICENSE](LICENSE).
+
+## Liên hệ
+
+**Trần Kính Hoàng (hoaug)**
+
+- GitHub: [@hoaug-tran](https://github.com/hoaug-tran)
+- Facebook: [hoaugtr](https://facebook.com/hoaugtr)
+- Email: hi@trkhoang.com
 
 ---
 
-*Phần mềm này được tạo ra với mục đích giúp sinh viên UNETI xem lịch học, lịch thi dễ dàng hơn mà không cần phải truy cập trang web của trường ( đôi khi web trường lag, treo, sập rất là khó chịu ).*
+Made with ❤️ by Trần Kính Hoàng
