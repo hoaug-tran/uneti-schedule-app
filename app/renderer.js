@@ -185,16 +185,21 @@ function registerIpcListeners() {
   }
   if (window.scheduleAPI?.onReload) {
     window.scheduleAPI.onReload(async () => {
-      window.loggerAPI?.debug("onReload event received");
+      window.loggerAPI?.debug("scheduleAPI.onReload triggered");
+
+      hideToast("refresh-reminder-toast");
+
       await render(window.dateAPI.weekKey(currentWeek));
 
-      setTimeout(() => {
-        createToast(i18n.t("refreshReminder"), {
-          id: "refresh-reminder-toast",
-          duration: 6000,
-          type: "info"
-        });
-      }, 2000);
+      if (Math.random() < 0.4) {
+        setTimeout(() => {
+          createToast(i18n.t("refreshReminder"), {
+            id: "refresh-reminder-toast",
+            duration: 6000,
+            type: "info"
+          });
+        }, 2000);
+      }
     });
   }
   if (window.widgetAPI?.onLogin) {
@@ -212,55 +217,177 @@ function registerIpcListeners() {
     });
   }
 
-  window.updateAPI?.onUpdateToast?.((msg) => {
-    updateToastShown = true;
-    const html = `
-      <div style="display:flex; gap:.75rem; align-items:center;">
-        <div style="flex:1">${msg}</div>
-        <button id="btn-toast-update-now" class="btn">Update Now</button>
-      </div>`;
-    const toast = createToast(html, { id: "update-available", clickable: true });
-    toast
-      .querySelector("#btn-toast-update-now")
-      ?.addEventListener("click", async () => {
-        const pToast = createToast(`<div id="upd-line">Updating: 0%</div>`, {
-          id: "update-progress-toast",
-          clickable: true,
-          duration: 0,
-        });
-        hideToast("update-available");
-        const ok = await window.updateAPI.install();
-        if (!ok) {
-          hideToast("update-progress-toast");
-          createToast("Failed to start update download.", { duration: 3000 });
-        }
+  let updateModal = null;
+  let updateState = {
+    currentVersion: '',
+    newVersion: '',
+    isDownloading: false,
+    progress: 0,
+    downloaded: 0,
+    total: 0
+  };
+
+  function showUpdateModal(state) {
+    hideUpdateModal();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'update-modal-overlay';
+    overlay.id = 'update-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'update-modal';
+
+    let content = '';
+
+    if (state === 'checking') {
+      content = `
+        <div class="update-header">${i18n.t('updateChecking')}</div>
+        <div class="update-status">${i18n.t('updateChecking')}</div>
+      `;
+    } else if (state === 'available') {
+      content = `
+        <div class="update-header">${i18n.t('updateAvailable')}</div>
+        <div class="update-version">
+          <div class="update-version-item">
+            <div class="update-version-label">${i18n.t('updateCurrentVersion')}</div>
+            <div class="update-version-number">v${updateState.currentVersion}</div>
+          </div>
+          <div class="update-version-item">
+            <div class="update-version-label">${i18n.t('updateNewVersion')}</div>
+            <div class="update-version-number">v${updateState.newVersion}</div>
+          </div>
+        </div>
+        <div class="update-buttons">
+          <button class="update-btn update-btn-secondary" id="update-later-btn">${i18n.t('updateLater')}</button>
+          <button class="update-btn update-btn-primary" id="update-now-btn">${i18n.t('updateNow')}</button>
+        </div>
+      `;
+    } else if (state === 'downloading') {
+      const percent = Math.round(updateState.progress);
+      const downloadedMB = (updateState.downloaded / 1024 / 1024).toFixed(1);
+      const totalMB = (updateState.total / 1024 / 1024).toFixed(1);
+
+      content = `
+        <div class="update-header">${i18n.t('updateDownloading')}</div>
+        <div class="update-progress-container">
+          <div class="update-progress-bar-bg">
+            <div class="update-progress-bar" style="width: ${percent}%"></div>
+          </div>
+          <div class="update-status">${percent}% (${downloadedMB} MB / ${totalMB} MB)</div>
+        </div>
+      `;
+    } else if (state === 'downloaded') {
+      content = `
+        <div class="update-header">${i18n.t('updateDownloaded')}</div>
+        <div class="update-status">${i18n.t('updateDownloaded')}</div>
+        <div class="update-buttons">
+          <button class="update-btn update-btn-secondary" id="update-later-btn">${i18n.t('updateLater')}</button>
+          <button class="update-btn update-btn-primary" id="update-restart-btn">${i18n.t('updateRestart')}</button>
+        </div>
+      `;
+    } else if (state === 'not-available') {
+      content = `
+        <div class="update-header">${i18n.t('updateNotAvailable')}</div>
+        <div class="update-status">${i18n.t('updateNotAvailable')}</div>
+        <div class="update-buttons">
+          <button class="update-btn update-btn-primary" id="update-close-btn">OK</button>
+        </div>
+      `;
+    } else if (state === 'error') {
+      content = `
+        <div class="update-header">${i18n.t('updateError')}</div>
+        <div class="update-status">${i18n.t('updateError')}</div>
+        <div class="update-buttons">
+          <button class="update-btn update-btn-primary" id="update-close-btn">OK</button>
+        </div>
+      `;
+    }
+
+    modal.innerHTML = content;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    updateModal = overlay;
+
+    const laterBtn = modal.querySelector('#update-later-btn');
+    const nowBtn = modal.querySelector('#update-now-btn');
+    const restartBtn = modal.querySelector('#update-restart-btn');
+    const closeBtn = modal.querySelector('#update-close-btn');
+
+    if (laterBtn) {
+      laterBtn.addEventListener('click', hideUpdateModal);
+    }
+
+    if (nowBtn) {
+      nowBtn.addEventListener('click', async () => {
+        nowBtn.disabled = true;
+        nowBtn.textContent = i18n.t('updateDownloading');
+        await window.updateAPI.install();
       });
+    }
+
+    if (restartBtn) {
+      restartBtn.addEventListener('click', () => {
+        window.updateAPI.confirmInstall();
+      });
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', hideUpdateModal);
+    }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay && state !== 'downloading') {
+        hideUpdateModal();
+      }
+    });
+  }
+
+  function hideUpdateModal() {
+    if (updateModal) {
+      updateModal.remove();
+      updateModal = null;
+    }
+  }
+
+  window.updateAPI?.onUpdateToast?.((msg) => {
+    const versionMatch = msg.match(/v([\d.]+)/);
+    if (versionMatch) {
+      updateState.newVersion = versionMatch[1];
+      updateState.currentVersion = window.appAPI?.getVersion?.() || '1.5.0';
+      showUpdateModal('available');
+    }
   });
 
+  if (window.updateAPI?.onChecking) {
+    window.updateAPI.onChecking(() => {
+      showUpdateModal('checking');
+    });
+  }
+
+  if (window.updateAPI?.onNotAvailable) {
+    window.updateAPI.onNotAvailable(() => {
+      showUpdateModal('not-available');
+    });
+  }
+
   window.updateAPI?.onProgress?.((p) => {
-    const el = document.getElementById("upd-line");
-    if (!el) return;
-    const pct = Math.max(0, Math.min(100, p?.percent ?? 0)).toFixed(0);
-    const done = fmtBytes(p?.transferred ?? 0);
-    const total = fmtBytes(p?.total ?? 0);
-    const speed = fmtBytes(p?.bytesPerSecond ?? 0) + "/s";
-    el.textContent = `Updating: ${pct}% (${done} / ${total} - ${speed})`;
+    updateState.progress = p?.percent ?? 0;
+    updateState.downloaded = p?.transferred ?? 0;
+    updateState.total = p?.total ?? 0;
+
+    if (updateModal) {
+      showUpdateModal('downloading');
+    }
   });
 
   window.updateAPI?.onDownloaded?.(() => {
-    hideToast("update-progress-toast");
-    createToast("Update downloaded. Restarting to install...", {
-      id: "update-ready",
-      duration: 3000,
-    });
-    setTimeout(() => {
-      window.updateAPI.confirmInstall();
-    }, 3000);
+    showUpdateModal('downloaded');
   });
 
   window.updateAPI?.onError?.((msg) => {
-    hideToast("update-progress-toast");
-    createToast(`Update error: ${msg}`, { duration: 4000 });
+    window.loggerAPI?.error(`[Update] Error: ${msg}`);
+    showUpdateModal('error');
   });
 
   window.addEventListener("languagechange", async () => {
@@ -275,6 +402,8 @@ function loadSchedule(offset) {
 
 async function render(isoDate) {
   const el = $("#content");
+  window.loggerAPI?.debug(`[render] START, isoDate: ${isoDate}`);
+
   try {
     window.loggerAPI?.debug(`render start, isoDate: ${isoDate}`);
     const payload = await window.scheduleAPI?.load?.(isoDate);
@@ -464,6 +593,8 @@ async function render(isoDate) {
     const btnNextWeek = $("#btn-next-week");
     const btnTheme = $("#btn-theme");
 
+    window.loggerAPI?.debug(`[Buttons] btnUpdate exists: ${!!btnUpdate}, btnRefresh exists: ${!!btnRefresh}`);
+
     document.querySelectorAll(".lang-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.lang === i18n.getLang());
       btn.onclick = () => {
@@ -488,24 +619,31 @@ async function render(isoDate) {
       };
     }
 
-    if (btnUpdate) btnUpdate.onclick = async () => {
-      const old = btnUpdate.textContent;
-      btnUpdate.disabled = true;
-      btnUpdate.textContent = i18n.t("checking");
-      try {
-        const res = await window.updateAPI?.check?.();
-        if (res?.update) {
-          showToast(`${i18n.t("newUpdate")} (v${res.version})`, "update-check-toast");
-        } else {
-          showToast(i18n.t("noUpdate"), "update-check-toast");
+    if (btnUpdate) {
+      window.loggerAPI?.debug("[btnUpdate] Attaching event handler");
+      btnUpdate.onclick = async () => {
+        window.loggerAPI?.debug("[btnUpdate] Clicked, disabling button");
+        const old = btnUpdate.textContent;
+        btnUpdate.disabled = true;
+        btnUpdate.textContent = "...";
+        window.loggerAPI?.debug(`[btnUpdate] Button disabled: ${btnUpdate.disabled}`);
+
+        try {
+          const res = await window.updateAPI?.check?.();
+          if (res?.update) {
+            showToast(`${i18n.t("newUpdate")} (v${res.version})`, "update-check-toast");
+          } else {
+            showToast(i18n.t("noUpdate"), "update-check-toast");
+          }
+        } catch (e) {
+          showToast(i18n.t("checkError"), "check-update-toast");
+        } finally {
+          btnUpdate.disabled = false;
+          btnUpdate.textContent = old;
+          window.loggerAPI?.debug("[btnUpdate] Button re-enabled");
         }
-      } catch (e) {
-        showToast(i18n.t("checkError"), "check-update-toast");
-      } finally {
-        btnUpdate.disabled = false;
-        btnUpdate.textContent = old;
-      }
-    };
+      };
+    }
     if (btnLogin) btnLogin.onclick = () => window.widgetAPI.login();
     if (btnRefresh) btnRefresh.onclick = async () => {
       const old = btnRefresh.textContent;
@@ -513,16 +651,36 @@ async function render(isoDate) {
       btnRefresh.textContent = "...";
       try {
         await window.widgetAPI.refresh();
-      } catch (e) { }
-      finally {
+        createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success" });
+      } catch (e) {
+        createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error" });
+      } finally {
         btnRefresh.disabled = false;
         btnRefresh.textContent = old;
       }
     };
     if (btnHide) btnHide.onclick = () => window.widgetAPI.hide();
     if (btnExit) btnExit.onclick = () => window.widgetAPI.quit();
-    if (btnPrevWeek) btnPrevWeek.onclick = () => changeWeek(-1);
-    if (btnNextWeek) btnNextWeek.onclick = () => changeWeek(1);
+    if (btnPrevWeek) btnPrevWeek.onclick = async () => {
+      window.loggerAPI?.debug("[btnPrevWeek] Clicked, disabling button");
+      btnPrevWeek.disabled = true;
+      try {
+        await changeWeek(-1);
+      } finally {
+        btnPrevWeek.disabled = false;
+        window.loggerAPI?.debug("[btnPrevWeek] Re-enabled button");
+      }
+    };
+    if (btnNextWeek) btnNextWeek.onclick = async () => {
+      window.loggerAPI?.debug("[btnNextWeek] Clicked, disabling button");
+      btnNextWeek.disabled = true;
+      try {
+        await changeWeek(1);
+      } finally {
+        btnNextWeek.disabled = false;
+        window.loggerAPI?.debug("[btnNextWeek] Re-enabled button");
+      }
+    };
 
     if (state === "ok") {
       if (btnLogin) btnLogin.style.display = "none";
@@ -551,29 +709,26 @@ async function render(isoDate) {
   }
 }
 
+
 let weekChangeTimeout = null;
+let isChangingWeek = false;
 
 async function changeWeek(offset) {
+  if (isChangingWeek) {
+    window.loggerAPI?.debug(`[changeWeek] Already changing, ignoring spam click`);
+    return;
+  }
+
   if (weekChangeTimeout) {
     window.loggerAPI?.debug(`[changeWeek] Debouncing, ignoring rapid click`);
     return;
   }
 
+  isChangingWeek = true;
+
   const toastId = "week-toast";
-  const btnPrev = $("#btn-prev-week");
-  const btnNext = $("#btn-next-week");
-  const btnRefresh = $("#btn-refresh");
 
   window.loggerAPI?.debug(`[changeWeek] START offset=${offset}, currentWeek=${currentWeek.toISOString()}`);
-
-  if (btnPrev) btnPrev.disabled = true;
-  if (btnNext) btnNext.disabled = true;
-  if (btnRefresh) btnRefresh.disabled = true;
-  window.loggerAPI?.debug(`[changeWeek] Navigation buttons disabled`);
-
-  weekChangeTimeout = setTimeout(() => {
-    weekChangeTimeout = null;
-  }, 300);
 
   try {
     const calendarEl = document.getElementById("cal");
@@ -582,12 +737,12 @@ async function changeWeek(offset) {
       window.loggerAPI?.debug(`[changeWeek] Skeleton UI injected`);
     }
 
+    const targetWeek = new Date(currentWeek);
+    targetWeek.setDate(targetWeek.getDate() + (offset * 7));
+    const cacheKey = window.dateAPI.weekKey(targetWeek);
+
     if (!isOnline) {
-      window.loggerAPI?.warn(`[changeWeek] Offline mode, using cache only`);
-      const targetWeek = new Date(currentWeek);
-      targetWeek.setDate(targetWeek.getDate() + (offset * 7));
-      const cacheKey = window.dateAPI.weekKey(targetWeek);
-      window.loggerAPI?.debug(`[changeWeek] Cache lookup for key: ${cacheKey}`);
+      window.loggerAPI?.warn(`[changeWeek] Offline mode, trying cache for key: ${cacheKey}`);
       const cachedData = await window.scheduleAPI?.load?.(cacheKey);
 
       if (cachedData && cachedData.weekStart) {
@@ -609,7 +764,6 @@ async function changeWeek(offset) {
     window.loggerAPI?.debug(`[changeWeek] fetchWeek returned:`, payload ? `weekStart=${payload.weekStart}, data.length=${payload.data?.length}` : "null");
 
     if (!payload || !payload.weekStart) {
-      window.loggerAPI?.warn(`[changeWeek] No payload from network, attempting cache fallback`);
       const targetWeek = new Date(currentWeek);
       targetWeek.setDate(targetWeek.getDate() + (offset * 7));
       const cacheKey = window.dateAPI.weekKey(targetWeek);
@@ -667,10 +821,7 @@ async function changeWeek(offset) {
       showToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), toastId, "error");
     }
   } finally {
-    if (btnPrev) btnPrev.disabled = false;
-    if (btnNext) btnNext.disabled = false;
-    if (btnRefresh) btnRefresh.disabled = false;
-    window.loggerAPI?.debug(`[changeWeek] END, buttons re-enabled`);
+    isChangingWeek = false;
+    window.loggerAPI?.debug(`[changeWeek] END, isChangingWeek reset`);
   }
 }
-

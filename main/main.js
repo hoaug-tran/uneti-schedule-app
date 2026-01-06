@@ -23,8 +23,9 @@ import { showLoginWindow } from "../app/fetcher/loginWindow.js";
 import {
   bootstrapCookiesToSession,
   attachCookieAutoPersist,
-  hasCookies,
   getCookiePartition,
+  hasCookies,
+  areCookiesValid,
 } from "../app/fetcher/cookieManager.js";
 import {
   startCookieRefreshService,
@@ -68,29 +69,27 @@ ipcMain.handle("widget:refresh", async () => {
   try {
     logger.debug("[IPC] widget:refresh");
 
-    const cookiesValid = await hasCookies();
+    const cookiesValid = await areCookiesValid();
+    logger.debug(`[widget:refresh] areCookiesValid result: ${cookiesValid}`);
+
     if (!cookiesValid) {
-      logger.warn("[widget:refresh] No cookies found, triggering login");
-      win?.webContents.send("status", "Session expired, please login again.");
+      logger.warn("[widget:refresh] Cookies expired or missing, triggering login");
       win?.webContents.send("login-required");
       return;
     }
 
-    await clearAllSchedules();
+    logger.info("[widget:refresh] Cookies valid, refreshing schedule");
+
     await getSchedule(0);
-    win?.webContents.send("status", "Schedule ready");
+    await getSchedule(1);
+
     win?.webContents.send("reload");
   } catch (err) {
     logger.warn(`[widget:refresh] fail: ${err?.message}`);
     const msg = String(err || "");
     if (msg.includes("Cookie expired") || msg.includes("No cookies")) {
-      win?.webContents.send("status", "Session expired, please login again.");
       win?.webContents.send("login-required");
     } else {
-      win?.webContents.send(
-        "status",
-        "Failed to load schedule, using old data."
-      );
       win?.webContents.send("reload");
     }
   }
@@ -268,30 +267,38 @@ function resetStallWatch() {
 }
 
 autoUpdater.on("download-progress", (p) => {
-  downloading = true;
-  const { percent, transferred, total, bytesPerSecond } = p;
+  logger.debug(
+    `[autoUpdater] progress: ${p.percent?.toFixed(1)}% (${(
+      p.transferred /
+      1024 /
+      1024
+    ).toFixed(1)}MB / ${(p.total / 1024 / 1024).toFixed(1)}MB)`
+  );
   win?.webContents.send("update:progress", {
-    percent,
-    transferred,
-    total,
-    bytesPerSecond,
+    percent: p.percent,
+    transferred: p.transferred,
+    total: p.total,
+    bytesPerSecond: p.bytesPerSecond,
   });
-  if (transferred !== lastTransferred) {
-    lastTransferred = transferred;
-    resetStallWatch();
-  }
 });
 
 autoUpdater.on("update-downloaded", () => {
-  downloading = false;
-  if (stallTimer) clearTimeout(stallTimer);
+  logger.info("[autoUpdater] update downloaded, ready to install");
   win?.webContents.send("update:downloaded");
 });
 
 autoUpdater.on("error", (err) => {
-  downloading = false;
-  if (stallTimer) clearTimeout(stallTimer);
-  win?.webContents.send("update:error", err?.message ?? String(err));
+  const msg = err?.message || String(err);
+  logger.error(`[autoUpdater] error: ${msg}`);
+
+  let userMessage = "Lỗi khi kiểm tra cập nhật";
+  if (msg.includes("ENOTFOUND") || msg.includes("ETIMEDOUT") || msg.includes("ECONNREFUSED")) {
+    userMessage = "Không thể kết nối đến server. Vui lòng kiểm tra mạng.";
+  } else if (msg.includes("timeout")) {
+    userMessage = "Kết nối quá chậm. Vui lòng thử lại sau.";
+  }
+
+  win?.webContents.send("update:error", userMessage);
 });
 
 function createWindow() {
@@ -319,6 +326,21 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, "../app/index.html"));
 
+  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+  if (!isDev) {
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12') {
+        event.preventDefault();
+      }
+      if (input.control && input.shift && input.key === 'I') {
+        event.preventDefault();
+      }
+      if (input.control && input.shift && input.key === 'J') {
+        event.preventDefault();
+      }
+    });
+  }
+
   win.webContents.on("did-finish-load", () => {
     logger.debug("[main] did-finish-load");
     win?.webContents.send(
@@ -328,7 +350,13 @@ function createWindow() {
     win?.webContents.send("reload");
   });
 
+  win.on("close", (e) => {
+    e.preventDefault();
+    win.hide();
+  });
+
   win.on("closed", () => (win = null));
+
   let blurTimer = null;
   win.on("blur", () => {
     clearTimeout(blurTimer);
@@ -413,6 +441,28 @@ async function createTray() {
           shell.openPath(logFile).catch((err) => {
             logger.error(`[Tray] Failed to open log file: ${err?.message}`);
           });
+        }
+      },
+    },
+    {
+      label: i18n.t("trayCheckUpdate"),
+      click: async () => {
+        try {
+          win?.webContents.send("update:checking");
+          const result = await checkForUpdate();
+          if (result.update) {
+            win?.webContents.send(
+              "toast-update",
+              `New update available (v${result.version}). Click to update.`
+            );
+          } else if (result.error) {
+            win?.webContents.send("update:error", "Lỗi khi kiểm tra cập nhật");
+          } else {
+            win?.webContents.send("update:not-available");
+          }
+        } catch (err) {
+          logger.error(`[Tray] Check update failed: ${err?.message}`);
+          win?.webContents.send("update:error", "Lỗi khi kiểm tra cập nhật");
         }
       },
     },

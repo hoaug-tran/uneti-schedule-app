@@ -124,6 +124,8 @@ contextBridge.exposeInMainWorld("updateAPI", {
   confirmInstall: () => ipcRenderer.invoke("app:confirm-install"),
   onUpdateToast: (cb) =>
     ipcRenderer.on("toast-update", (_evt, msg) => cb?.(msg)),
+  onChecking: (cb) => ipcRenderer.on("update:checking", () => cb?.()),
+  onNotAvailable: (cb) => ipcRenderer.on("update:not-available", () => cb?.()),
   onProgress: (cb) => ipcRenderer.on("update:progress", (_evt, p) => cb?.(p)),
   onDownloaded: (cb) => ipcRenderer.on("update:downloaded", () => cb?.()),
   onError: (cb) => ipcRenderer.on("update:error", (_evt, msg) => cb?.(msg)),

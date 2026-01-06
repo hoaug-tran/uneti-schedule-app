@@ -169,15 +169,36 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Crede
 
 **Solution**: Login again.
 
-### "You are Offline" Toast Won't Disappear
+### "You are Offline" Notification Won't Disappear
 
-**Symptoms**: Still shows offline warning despite having internet.
+**Symptoms**: Still shows offline notification despite having internet.
 
 **Try these**:
 1. Wait 5-10 seconds
 2. Click "Refresh" button
 3. Restart app
 4. If still not working, try Right-click tray → Exit → Open app
+
+### App does not update automatically / Update failed
+
+**Issue description**:  
+The application does not update to a newer version automatically, or the update process fails.
+
+**Possible causes**:
+- Unstable or interrupted network connection
+- File write permissions blocked by antivirus software or Windows Defender
+- Update files being removed during download
+- An unexpected issue introduced by the developer (yes, this can happen)
+
+**Solution**:
+1. Fully exit the application
+2. Visit the [Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases) page
+3. Download and install the **latest version**
+4. Install it over the existing version (no need to uninstall first)
+
+> [!NOTE]
+> Installing a new version will **not remove your saved schedule data or login information**.  
+> If the issue was caused by a bug on the developer side, I sincerely apologize and will fix it as soon as possible.
 
 ### App Doesn't Auto-Start
 

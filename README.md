@@ -168,15 +168,35 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 
 **Giải pháp**: Đăng nhập lại.
 
-### Toast "Bạn đang Offline" không biến mất
+### Thông báo "Bạn đang Offline" không biến mất
 
-**Mô tả lỗi**: Dù đã có mạng nhưng vẫn hiện offline warning.
+**Mô tả lỗi**: Dù đã có mạng nhưng vẫn hiện thông báo offline.
 
 **Thử các cách sau**:
 1. Đợi 5-10 giây
 2. Click nút "Làm mới"
 3. Khởi động lại app
 4. Nếu vẫn bị, chuột phải vào icon tray → Thoát → Mở lại app
+
+### App không tự cập nhật / không thể cập nhật
+
+**Mô tả lỗi**: Ứng dụng không tự cập nhật phiên bản mới, hoặc đơn giản là không thể tự động cập nhật.
+
+**Nguyên nhân có thể**:
+- Kết nối mạng không ổn định
+- Quyền ghi file bị chặn bởi antivirus / Windows Defender
+- File update bị xóa trong quá trình tải
+- Do thằng dev làm hỏng... (khả năng cao)
+
+**Giải pháp**:
+1. Thoát hoàn toàn ứng dụng
+2. Truy cập trang [Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)
+3. Tải và cài đặt **phiên bản mới nhất**
+4. Ghi đè lên bản cũ (không cần gỡ cài đặt trước)
+
+> [!NOTE]
+> Việc cài đặt phiên bản mới sẽ **không làm mất dữ liệu lịch hoặc thông tin đăng nhập**.
+> Nếu do dev thật, mình rất xin lỗi các bạn. Mình test kém quá.
 
 ### App không tự động khởi động
 
