@@ -17,15 +17,13 @@ App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật.
 
 <p align="center">
   <img src="assets/img/screenshot1.png" width="100%" />
-  <br/>
-  <sub><i>Lịch học thường</i></sub>
 </p>
+<p align="center"><i>Lịch học thường</i></p>
 
 <p align="center">
   <img src="assets/img/screenshot2.png" width="100%" />
-  <br/>
-  <sub><i>Lịch thi</i></sub>
 </p>
+<p align="center"><i>Lịch thi</i></p>
 
 ## Tính năng chính
 
@@ -81,12 +79,10 @@ App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật.
 </p>
 
 <p align="center">
-  <sub>
-    Kết quả quét VirusTotal tại thời điểm phát hành - 0/68 engine phát hiện mã độc  <br>
-    <a href="https://www.virustotal.com/gui/file/4eeffddde70899a3ea464f909e22ecc9007c096313862f1755039abd02cc438e/detection" target="_blank">
-      Xem chi tiết trên VirusTotal
-    </a>
-  </sub>
+  Kết quả quét VirusTotal tại thời điểm phát hành - 0/68 engine phát hiện mã độc<br/>
+  <a href="https://www.virustotal.com/gui/file/4eeffddde70899a3ea464f909e22ecc9007c096313862f1755039abd02cc438e/detection" target="_blank">
+    Xem chi tiết trên VirusTotal
+  </a>
 </p>
 
 ## Sử dụng

@@ -17,15 +17,13 @@ The app auto-refreshes schedules every hour, so your schedule is always up to da
 
 <p align="center">
   <img src="assets/img/screenshot1.png" width="100%" />
-  <br/>
-  <sub><i>Regular schedule</i></sub>
 </p>
+<p align="center"><em>Regular schedule</em></p>
 
 <p align="center">
   <img src="assets/img/screenshot2.png" width="100%" />
-  <br/>
-  <sub><i>Exam schedule</i></sub>
 </p>
+<p align="center"><em>Exam schedule</em></p>
 
 ## Main Features
 
@@ -80,12 +78,12 @@ The app auto-refreshes schedules every hour, so your schedule is always up to da
 </p>
 
 <p align="center">
-  <sub>
-    VirusTotal scan results at the time of release - 0/68 security engines reported no malware detection.<br/>
-    <a href="https://www.virustotal.com/gui/file/4eeffddde70899a3ea464f909e22ecc9007c096313862f1755039abd02cc438e/detection" target="_blank">
-      View the detailed VirusTotal report
-    </a>
-  </sub>
+  <em>
+    VirusTotal scan results at the time of release - 0/68 security engines reported no malware detection.
+  </em><br/>
+  <a href="https://www.virustotal.com/gui/file/4eeffddde70899a3ea464f909e22ecc9007c096313862f1755039abd02cc438e/detection" target="_blank">
+    View the detailed VirusTotal report
+  </a>
 </p>
 
 ## Usage
