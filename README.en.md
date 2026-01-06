@@ -78,10 +78,12 @@ The app auto-refreshes schedules every hour, so your schedule is always up to da
 </p>
 
 <p align="center">
-  <em>
-    VirusTotal scan results at the time of release - 0/68 security engines reported no malware detection.
-  </em><br/>
-  <a href="https://www.virustotal.com/gui/file/4eeffddde70899a3ea464f909e22ecc9007c096313862f1755039abd02cc438e/detection" target="_blank">
+  VirusTotal scan results at the time of release
+  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.5.1">
+    v1.5.1
+  </a>
+  – 0/68 security engines detected malware.<br/>
+  <a href="https://www.virustotal.com/gui/file/e212c1d26d1f09c380c4ac5d8219d75eb6f94c8f5daa0c362aab214b889023c1" target="_blank">
     View the detailed VirusTotal report
   </a>
 </p>
