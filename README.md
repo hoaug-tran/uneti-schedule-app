@@ -9,11 +9,11 @@
 
 ## Giới thiệu
 
-App này mình viết để tra cứu lịch học UNETI cho tiện. Thay vì phải mở trình duyệt, đăng nhập vào trang lịch của trường rồi thao tác nhiều bước mỗi lần muốn xem - và đôi khi website còn không truy cập được - thì giờ chỉ cần click vào tray icon là xong.
+Ứng dùng Widget này mình viết để theo dõi lịch học UNETI cho tiện. Thay vì phải mở trình duyệt, đăng nhập vào trang lịch của trường rồi thao tác nhiều bước mỗi lần muốn xem - và đôi khi website còn không truy cập được - thì giờ chỉ cần click vào tray icon là xong.
 
 Ứng dụng hỗ trợ xem offline, nên ngay cả khi server trường gặp sự cố hoặc mất kết nối internet, bạn vẫn có thể xem lịch đã lưu.
 
-App tự động làm mới lịch mỗi giờ để đảm bảo dữ lịch học, lịch thi luôn được cập nhật. Ngoài ra, bạn cũng có thể bấm Làm mới thủ công bất cứ lúc nào khi cần.
+Ứng dụng tự động làm mới lịch mỗi giờ để đảm bảo dữ lịch học, lịch thi luôn được cập nhật. Ngoài ra, bạn cũng có thể bấm Làm mới thủ công bất cứ lúc nào khi cần.
 
 ## Một số hình ảnh của Widget
 
@@ -48,10 +48,10 @@ App tự động làm mới lịch mỗi giờ để đảm bảo dữ lịch h�
 
 1. Tải file `.exe` từ [Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)
 2. Chạy installer
-3. Mở app và đăng nhập bằng tài khoản UNETI
+3. Mở ứng dụng và đăng nhập bằng tài khoản UNETI
 
 > [!IMPORTANT]
-> Lần đầu cần internet để đăng nhập. Sau đó app vẫn chạy được khi offline.
+> Lần đầu cần internet để đăng nhập. Sau đó ứng dụng vẫn chạy được khi offline.
 
 ## Lưu ý & Từ chối trách nhiệm
 
@@ -66,7 +66,7 @@ App tự động làm mới lịch mỗi giờ để đảm bảo dữ lịch h�
 > **Lưu ý về cảnh báo Virus / Windows SmartScreen:**
 > Ứng dụng này KHÔNG chứa virus, malware, spyware hay bất kỳ mã độc nào. Do mình không có kinh phí (khoảng 5-7 triệu VNĐ/năm) để duy trì chứng chỉ xác thực từ Microsoft, nên Windows sẽ tự động gắn cờ đây là "Phần mềm không xác định" (Unknown Publisher).
 > 
-> **App sạch 100% và mã nguồn mở.** Bạn có thể tự mình kiểm tra code ngay tại repository này để yên tâm.
+> **Ứng dụng sạch 100% và mã nguồn mở.** Bạn có thể tự mình kiểm tra code ngay tại repository này để yên tâm.
 >
 > **Để mở ứng dụng:**
 > 1. Bấm vào **More info** (Thêm thông tin).
@@ -96,10 +96,10 @@ App tự động làm mới lịch mỗi giờ để đảm bảo dữ lịch h�
 
 ### Đăng nhập
 
-Mở app lần đầu sẽ hiện cửa sổ đăng nhập. Nhập tài khoản / mật khẩu trang sinh viên UNETI như bình thường.
+Mở ứng dụng lần đầu sẽ hiện cửa sổ đăng nhập. Nhập tài khoản / mật khẩu trang sinh viên UNETI như bình thường.
 
 > [!NOTE]
-> App chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu hay gửi đi đâu cả.
+> Ứng dụng chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu hay gửi đi đâu cả.
 
 ### Xem lịch
 
@@ -110,7 +110,7 @@ Sau khi đăng nhập, lịch sẽ tự động hiển thị. Dùng nút "← Tr
 Click nút "Làm mới" để tải lịch mới nhất từ server. Nên làm mới trước những ngày quan trọng (thi, nộp đồ án...).
 
 > [!TIP]
-> App tự động làm mới mỗi giờ, nhưng bạn vẫn nên bấm "Làm mới" thủ công trước ngày thi để chắc chắn.
+> Ứng dụng tự động làm mới mỗi giờ, nhưng bạn vẫn nên bấm "Làm mới" thủ công trước ngày thi để chắc chắn.
 
 ### Tray Menu
 
@@ -120,36 +120,36 @@ Chuột phải vào tray icon để mở menu:
 - **Xoá dữ liệu lịch**: Xoá lịch đã lưu (dùng khi lịch bị lỗi)
 - **Xoá dữ liệu người dùng (đăng xuất)**: Đăng xuất hoàn toàn
 - **Xem nhật ký**: Xem file log (để debug khi có lỗi)
-- **Giới thiệu**: Xem version của app, thông tin của dev
+- **Giới thiệu**: Xem version của ứng dụng, thông tin của dev
 - **Tự động cập nhật**: Tự động cập nhật khi có phiên bản mới (mặc định bật)
-- **Thoát**: Thoát app
+- **Thoát**: Thoát ứng dụng
 
 ## FAQ
 
-**Q: App có miễn phí không?**  
+**Q: Ứng dụng có miễn phí không?**  
 A: Có, hoàn toàn miễn phí và open-source.
 
-**Q: App có lưu mật khẩu không?**  
-A: Không. App chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu.
+**Q: Ứng dụng có lưu mật khẩu không?**  
+A: Không. Ứng dụng chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu.
 
 **Q: Tại sao nhiều khi phải đăng nhập lại?**  
 A: Cookie của trường (UNETI) với mỗi tài khoản của sinh viên có thời hạn. Khi hết hạn thì phải đăng nhập lại.
 
 **Q: Lịch có chính xác không?**  
-A: Có. App lấy lịch trực tiếp từ server UNETI và tự động làm mới mỗi giờ.
+A: Có. Ứng dụng lấy lịch trực tiếp từ server UNETI và tự động làm mới mỗi giờ.
 
-**Q: App có hoạt động offline không?**  
-A: Có. Khi mất mạng, app sẽ dùng lịch đã lưu. Khi có mạng lại sẽ tự động cập nhật.
+**Q: Ứng dụng có hoạt động offline không?**  
+A: Có. Khi mất mạng, ứng dụng sẽ dùng lịch đã lưu. Khi có mạng lại sẽ tự động cập nhật.
 
-**Q: Tại sao khi cài app nặng ~300MB?**  
+**Q: Tại sao khi cài ứng dụng nặng ~300MB?**  
 A: Vì đây là ứng dụng Electron nên bộ cài phải chứa:
 - Electron runtime (~200MB+)
 - Native modules (keytar, better-sqlite3…)
 - Tài nguyên giao diện
 - Bộ cài NSIS và metadata
 
-> Code JavaScript của app thực tế chỉ ~5–10MB.  
-> Dung lượng lớn là đặc điểm chung của Electron app trên Windows, không phải riêng ứng dụng này.
+> Code JavaScript của ứng dụng thực tế chỉ ~5–10MB.  
+> Dung lượng lớn là đặc điểm chung của ứng dụng Electron trên Windows, không phải riêng ứng dụng này.
 
 **Q: Dữ liệu lưu ở đâu?**  
 A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows Credential Manager.
@@ -163,7 +163,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Thử các cách sau**:
 1. Kiểm tra kết nối internet
 2. Tắt firewall/antivirus tạm thời
-3. Tắt app đi và mở lại
+3. Tắt ứng dụng đi và mở lại
 4. Chuột phải tray → Xoá dữ liệu người dùng → Thử lại
 
 ### Lịch bị sai hoặc thiếu
@@ -190,10 +190,10 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Thử các cách sau**:
 1. Đợi 5-10 giây
 2. Click nút "Làm mới"
-3. Khởi động lại app
-4. Nếu vẫn bị, chuột phải vào icon tray → Thoát → Mở lại app
+3. Khởi động lại ứng dụng
+4. Nếu vẫn bị, chuột phải vào icon tray → Thoát → Mở lại ứng dụng
 
-### App không tự cập nhật / không thể cập nhật
+### Ứng dụng không tự cập nhật / không thể cập nhật
 
 **Mô tả lỗi**: Ứng dụng không tự cập nhật phiên bản mới, hoặc đơn giản là không thể tự động cập nhật.
 
@@ -213,7 +213,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 > Việc cài đặt phiên bản mới sẽ **không làm mất dữ liệu lịch hoặc thông tin đăng nhập**.
 > Nếu do dev thật, mình rất xin lỗi các bạn. Mình test kém quá.
 
-### App không tự động khởi động
+### Ứng dụng không tự động khởi động
 
 **Mô tả lỗi**: Dù đã bật "Khởi động cùng Windows" nhưng không tự khởi động.
 
