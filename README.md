@@ -16,12 +16,12 @@ App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật.
 ## Một số hình ảnh của Widget
 
 <p align="center">
-  <img src="assets/img/screenshot1.png" width="100%" />
+  <img src="assets/img/regular.png" width="100%" />
 </p>
 <p align="center"><i>Lịch học thường</i></p>
 
 <p align="center">
-  <img src="assets/img/screenshot2.png" width="100%" />
+  <img src="assets/img/exam.png" width="100%" />
 </p>
 <p align="center"><i>Lịch thi</i></p>
 
@@ -75,16 +75,16 @@ App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật.
 ### Kết quả quét VirusTotal
 
 <p align="center">
-  <img src="assets/img/virustotal.png" width="100%" />
+  <img src="assets/img/virustotal_check.png" width="100%" />
 </p>
 
 <p align="center">
   Kết quả quét VirusTotal tại thời điểm phát hành
-  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.5.1">
-    v1.5.1
+  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.5.2">
+    v1.5.2
   </a>
   – 0/68 engine phát hiện mã độc<br/>
-  <a href="https://www.virustotal.com/gui/file/e212c1d26d1f09c380c4ac5d8219d75eb6f94c8f5daa0c362aab214b889023c1" target="_blank">
+  <a href="https://www.virustotal.com/gui/file/9ca935345e7f32c072323bf41df0001567243c2bd1adb95f0423530ef061bb58" target="_blank">
     Xem chi tiết trên VirusTotal
   </a>
 </p>
