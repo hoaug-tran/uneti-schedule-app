@@ -1,6 +1,6 @@
 # Widget Lịch học UNETI
 
-Ứng dụng desktop giúp sinh viên UNETI xem lịch học nhanh và tiện lợi.
+UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem lịch học nhanh chóng và tiện lợi.
 
 ![Phiên bản](https://img.shields.io/github/package-json/v/hoaug-tran/uneti-schedule-app?label=Phiên%20bản&style=for-the-badge&color=16a34a)
 ![Nền tảng](https://img.shields.io/badge/platform-Windows-2563eb?label=Nền%20tảng&style=for-the-badge)
