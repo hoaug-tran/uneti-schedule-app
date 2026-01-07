@@ -2,16 +2,18 @@
 
 Ứng dụng desktop giúp sinh viên UNETI xem lịch học nhanh và tiện lợi.
 
-![Version](https://img.shields.io/badge/version-1.5.2-16a34a?style=for-the-badge)
-![Platform](https://img.shields.io/badge/platform-Windows-2563eb?style=for-the-badge)
+![Phiên bản](https://img.shields.io/github/package-json/v/hoaug-tran/uneti-schedule-app?label=Phiên%20bản&style=for-the-badge&color=16a34a)
+![Nền tảng](https://img.shields.io/badge/platform-Windows-2563eb?label=Nền%20tảng&style=for-the-badge)
 
 ---
 
 ## Giới thiệu
 
-App này mình viết để tra cứu lịch học UNETI cho tiện. Thay vì phải mở browser, đăng nhập vào trang lịch của trường rồi điều phải bấm mấy phát nữa mỗi lần muốn xem, giờ chỉ cần click vào tray icon là xong.
+App này mình viết để tra cứu lịch học UNETI cho tiện. Thay vì phải mở trình duyệt, đăng nhập vào trang lịch của trường rồi thao tác nhiều bước mỗi lần muốn xem - và đôi khi website còn không truy cập được - thì giờ chỉ cần click vào tray icon là xong.
 
-App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật. 
+Ứng dụng hỗ trợ xem offline, nên ngay cả khi server trường gặp sự cố hoặc mất kết nối internet, bạn vẫn có thể xem lịch đã lưu.
+
+App tự động làm mới lịch mỗi giờ để đảm bảo dữ lịch học, lịch thi luôn được cập nhật. Ngoài ra, bạn cũng có thể bấm Làm mới thủ công bất cứ lúc nào khi cần.
 
 ## Một số hình ảnh của Widget
 
@@ -33,6 +35,7 @@ App tự động làm mới lịch mỗi giờ, nên lịch luôn cập nhật.
 - Dark/Light theme
 - Tiếng Việt/English
 - Tray icon để truy cập nhanh
+- Tự động kiểm tra cập nhật mỗi 6 giờ
 
 ## Cài đặt
 
@@ -138,8 +141,15 @@ A: Có. App lấy lịch trực tiếp từ server UNETI và tự động làm m
 **Q: App có hoạt động offline không?**  
 A: Có. Khi mất mạng, app sẽ dùng lịch đã lưu. Khi có mạng lại sẽ tự động cập nhật.
 
-**Q: Tại sao khi cài app nặng tận 150MB?**  
-A: Electron runtime chiếm ~80MB (chuẩn của Electron app). Code app chỉ ~5MB.
+**Q: Tại sao khi cài app nặng ~300MB?**  
+A: Vì đây là ứng dụng Electron nên bộ cài phải chứa:
+- Electron runtime (~200MB+)
+- Native modules (keytar, better-sqlite3…)
+- Tài nguyên giao diện
+- Bộ cài NSIS và metadata
+
+> Code JavaScript của app thực tế chỉ ~5–10MB.  
+> Dung lượng lớn là đặc điểm chung của Electron app trên Windows, không phải riêng ứng dụng này.
 
 **Q: Dữ liệu lưu ở đâu?**  
 A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows Credential Manager.

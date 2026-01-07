@@ -2,18 +2,20 @@
 
 A desktop app for UNETI students to check class schedules quickly and conveniently.
 
-![Version](https://img.shields.io/badge/version-1.5.2-16a34a?style=for-the-badge)
-![Platform](https://img.shields.io/badge/platform-Windows-2563eb?style=for-the-badge)
+![Version](https://img.shields.io/github/package-json/v/hoaug-tran/uneti-schedule-app?label=Version&style=for-the-badge&color=16a34a)
+![Platform](https://img.shields.io/badge/platform-Windows-2563eb?label=Platform&style=for-the-badge)
 
 ---
 
 ## Introduction
 
-I built this app to make checking UNETI schedules easier. Instead of opening a browser and logging into the school's schedule page every time, you can just click the tray icon.
+This app was created to make checking UNETI schedules faster and more convenient. Instead of opening a browser, logging into the university website, and going through multiple steps each time - and sometimes dealing with the site being inaccessible - you can now view your schedule with a single click from the system tray.
 
-The app auto-refreshes schedules every hour, so your schedule is always up to date.
+The application supports offline viewing, so even if the university server is down or your internet connection is unavailable, you can still access your previously saved schedules.
 
-## Một số hình ảnh của Widget
+The app automatically refreshes class and exam schedules every hour to keep the data up to date. Additionally, you can manually refresh the schedule at any time when needed.
+
+## Screenshots
 
 <p align="center">
   <img src="assets/img/regular.png" width="100%" />
@@ -33,6 +35,7 @@ The app auto-refreshes schedules every hour, so your schedule is always up to da
 - Dark/Light theme
 - Vietnamese/English
 - Tray icon for quick access
+- Automatically checks for updates every 6 hours
 
 ## Installation
 
@@ -137,8 +140,16 @@ A: Yes. App fetches schedule directly from UNETI server and auto-refreshes every
 **Q: Does the app work offline?**  
 A: Yes. When offline, app uses cached schedule. When online again, it auto-updates.
 
-**Q: Why is the app 150MB?**  
-A: Electron runtime takes ~80MB (standard for Electron apps). App code is only ~5MB.
+**Q: Why is the installer around ~300MB?**  
+A: This application is built with Electron, so the installer needs to bundle:
+- The Electron runtime (~200MB+)
+- Native modules (such as keytar, better-sqlite3, etc.)
+- UI assets and resources
+- The NSIS installer and related metadata
+
+> The actual JavaScript code of the app is only about ~5–10MB.  
+> The large size is a common characteristic of Electron applications on Windows, not specific to this app.
+
 
 **Q: Where is data stored?**  
 A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Credential Manager.
