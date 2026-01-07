@@ -2,8 +2,8 @@
 
 A desktop app for UNETI students to check class schedules quickly and conveniently.
 
-[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
+![Version](https://img.shields.io/badge/version-1.5.2-16a34a?style=for-the-badge)
+![Platform](https://img.shields.io/badge/platform-Windows-2563eb?style=for-the-badge)
 
 ---
 
