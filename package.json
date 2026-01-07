@@ -1,6 +1,6 @@
 {
   "name": "uneti-schedule-widget",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Widget lịch học UNETI",
   "author": "Trần Kính Hoàng (hoaug)",
   "type": "module",
@@ -9,17 +9,21 @@
     "login": "node app/fetcher/loginAndSaveCookies.js",
     "fetch": "node app/fetcher/getSchedule.js",
     "dev": "cross-env NODE_ENV=development electron main/main.js",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "update-server": "http-server ./dist -p 8080 --cors"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
     "depcheck": "^1.4.7",
     "electron": "^38.1.2",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "http-server": "^14.1.1"
   },
   "dependencies": {
     "auto-launch": "^5.0.6",
     "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^17.2.3",
+    "electron-store": "^11.0.2",
     "electron-updater": "^6.6.2",
     "keytar": "^7.9.0"
   },
@@ -54,14 +58,23 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "app/assets/uneti.ico"
+      "icon": "app/assets/uneti.ico",
+      "publisherName": "Trần Kính Hoàng (hoaug)",
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "deleteAppDataOnUninstall": false,
-      "include": "build/installer.nsh"
+      "deleteAppDataOnUninstall": true,
+      "license": "build/license.txt",
+      "include": "build/installer.nsh",
+      "installerHeaderIcon": "app/assets/uneti.ico",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Widget lịch học UNETI",
+      "menuCategory": true,
+      "displayLanguageSelector": false
     }
   }
 }
