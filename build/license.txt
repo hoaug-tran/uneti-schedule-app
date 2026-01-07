@@ -1,0 +1,37 @@
+THỎA THUẬN NGƯỜI DÙNG - WIDGET LỊCH HỌC UNETI
+
+Bằng việc cài đặt và sử dụng ứng dụng này, bạn đồng ý với các điều khoản sau:
+
+1. MIỄN TRỪ TRÁCH NHIỆM
+   - Ứng dụng được cung cấp "NGUYÊN TRẠNG" không có bất kỳ bảo đảm nào.
+   - Tác giả KHÔNG chịu trách nhiệm về bất kỳ thiệt hại nào phát sinh từ việc sử dụng ứng dụng.
+   - Ứng dụng chỉ mang tính chất hỗ trợ, KHÔNG thay thế thông tin chính thức từ nhà trường.
+
+2. BẢO MẬT THÔNG TIN
+   - Ứng dụng lưu trữ thông tin đăng nhập LOCAL trên máy tính của bạn.
+   - Thông tin được mã hóa và KHÔNG được gửi đến bất kỳ bên thứ ba nào.
+   - Bạn có trách nhiệm bảo vệ thông tin đăng nhập của mình.
+
+3. SỬ DỤNG DỮ LIỆU
+   - Ứng dụng truy cập vào hệ thống UNETI để lấy lịch học của bạn.
+   - Dữ liệu được cache LOCAL để phục vụ quá trình sử dụng (sử dụng trong lúc Offline).
+   - KHÔNG thu thập hoặc chia sẻ dữ liệu cá nhân.
+
+4. CẬP NHẬT
+   - Ứng dụng có thể tự động kiểm tra và cài đặt bản cập nhật.
+   - Bạn có thể tắt tính năng này tại tuỳ bạn khi chuột phải biểu tượng ứng dụng trong Taskbar.
+
+5. GỠ CÀI ĐẶT
+   - Khi gỡ cài đặt, TẤT CẢ dữ liệu ứng dụng sẽ bị XÓA.
+   - Bao gồm: lịch học đã lưu, thông tin đăng nhập, cài đặt cá nhân.
+   - Hành động này KHÔNG THỂ HOÀN TÁC.
+
+6. MÃ NGUỒN MỞ
+   - Ứng dụng là mã nguồn mở, có thể xem tại GitHub: https://github.com/hoaug-tran/uneti-schedule-app.
+   - Bạn có quyền kiểm tra, sửa đổi và phân phối lại theo giấy phép MIT.
+
+CẢNH BÁO QUAN TRỌNG:
+- Ứng dụng có thể có lỗi hoặc hiển thị thông tin không chính xác.
+- Tác giả KHÔNG chịu trách nhiệm nếu bạn bỏ lỡ lớp bất cứ buổi học, thi nào do ứng dụng.
+
+Bằng việc nhấn "I Agree" (Tôi đồng ý), bạn xác nhận đã đọc, hiểu và chấp nhận các điều khoản trên.

@@ -15,6 +15,7 @@ build/
 *.dmg
 *.AppImage
 !build/installer.nsh
+!build/license.txt
 
 .playwright/
 test-results/
