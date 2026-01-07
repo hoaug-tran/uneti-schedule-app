@@ -140,6 +140,26 @@ function extractOffsets(html) {
   return { prev: null, current: null, next: null };
 }
 
+function validateOffsets(offsets) {
+  if (!offsets?.current) return true;
+
+  try {
+    const currentWeek = dmyToDate(offsets.current);
+    const now = new Date();
+    const diffMs = Math.abs(now - currentWeek);
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+    if (diffDays > 90) {
+      logger.warn(`[validateOffsets] Server returned stale week: ${offsets.current} (${Math.round(diffDays)} days old)`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.warn(`[validateOffsets] Failed to validate: ${err?.message}`);
+    return true;
+  }
+}
+
 export async function clearAllSchedules() {
   try {
     deleteAllSchedules();
@@ -205,9 +225,12 @@ export async function getSchedule(offset = 0, baseDate = null) {
       logger.debug(`[getSchedule] fragment length: ${fragment.length}`);
       if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
       lastOffsets = extractOffsets(fragment);
+      if (!validateOffsets(lastOffsets)) {
+        throw new Error("Cookie expired or stale session");
+      }
       if (!lastOffsets.current) lastOffsets.current = target;
       logger.debug("[getSchedule] offsets:", lastOffsets);
-      return await processFragment(fragment, lastOffsets.current, lastOffsets);
+      return await processFragment(fragment, target, lastOffsets);
     } else {
       logger.warn("[getSchedule] baseDate invalid, fallback to offset logic");
     }
@@ -223,6 +246,9 @@ export async function getSchedule(offset = 0, baseDate = null) {
     if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
 
     lastOffsets = extractOffsets(fragment);
+    if (!validateOffsets(lastOffsets)) {
+      throw new Error("Cookie expired or stale session");
+    }
     logger.debug("[getSchedule] offsets:", lastOffsets);
 
     target = lastOffsets.current;
@@ -267,6 +293,9 @@ export async function getSchedule(offset = 0, baseDate = null) {
   if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
 
   lastOffsets = extractOffsets(fragment);
+  if (!validateOffsets(lastOffsets)) {
+    throw new Error("Cookie expired or stale session");
+  }
   if (!lastOffsets.current) lastOffsets.current = target;
 
   logger.debug("[getSchedule] new offsets:", lastOffsets);

@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import path from "path";
 import { fileURLToPath } from "url";
 import {
@@ -35,6 +38,16 @@ import { closeDatabase, loadSchedule } from "../app/fetcher/scheduleDb.js";
 import { i18nInstance as i18n } from "../app/utils/i18n.js";
 
 import { logger } from "../app/utils/logger.js";
+import { store } from "../app/utils/store.js";
+
+const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+if (isDev && process.env.USE_LOCAL_UPDATE_SERVER === "true") {
+  autoUpdater.setFeedURL({
+    provider: "generic",
+    url: "http://localhost:8080"
+  });
+  logger.info("[autoUpdater] Using local update server: http://localhost:8080");
+}
 
 autoUpdater.autoDownload = false;
 const __filename = fileURLToPath(import.meta.url);
@@ -96,7 +109,11 @@ ipcMain.handle("widget:refresh", async () => {
 });
 
 ipcMain.handle("widget:hide", () => win?.hide());
-ipcMain.handle("widget:quit", () => app.quit());
+ipcMain.handle("widget:quit", () => {
+  app.isQuitting = true;
+  app.removeAllListeners("window-all-closed");
+  app.quit();
+});
 
 ipcMain.handle("widget:login", async () => {
   try {
@@ -143,12 +160,22 @@ ipcMain.handle("app:check-update", async () => {
   const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
 
   if (isDev) {
+    const mockState = process.env.MOCK_UPDATE;
+
+    if (mockState === 'available') {
+      logger.debug("[mock] Simulating update available");
+      return { update: true, version: "1.6.0" };
+    } else if (mockState === 'error') {
+      logger.debug("[mock] Simulating update error");
+      return { error: "Network error" };
+    }
+
     logger.debug("[mock] skip checkForUpdates (dev mode)");
     return { update: false, version: app.getVersion() };
   }
 
   logger.info("[autoUpdater] Checking for updates...");
-  const timeoutMs = 7000;
+  const timeoutMs = 10000;
 
   const withTimeout = (promise, ms) =>
     Promise.race([
@@ -169,43 +196,89 @@ ipcMain.handle("app:check-update", async () => {
 
     if (result.timeout) {
       logger.warn("[autoUpdater] checkForUpdates() timed out");
-      return { update: false, version: app.getVersion() };
+      return { error: "Request timed out" };
     }
 
     if (
       result?.updateInfo?.version &&
       result.updateInfo.version !== app.getVersion()
     ) {
-      win?.webContents.send(
-        "toast-update",
-        `New update available (v${result.updateInfo.version}). Click to update.`
-      );
+      logger.info(`[autoUpdater] Update available: ${result.updateInfo.version}`);
       return { update: true, version: result.updateInfo.version };
     }
 
+    logger.info("[autoUpdater] No update available");
     return { update: false, version: app.getVersion() };
   } catch (e) {
-    logger.error(`[autoUpdater] check update error: ${e?.message}`);
+    logger.error(`[autoUpdater] check update error: ${e?.message}`, { stack: e?.stack });
     return { error: e?.message ?? String(e) };
   }
 });
 
 ipcMain.handle("app:install-update", async () => {
+  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+
+  if (isDev && process.env.MOCK_UPDATE === 'available') {
+    logger.debug("[mock] Simulating download with progress");
+
+    for (let i = 0; i <= 100; i += 10) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      win?.webContents.send("update:progress", {
+        percent: i,
+        transferred: i * 1024 * 1024,
+        total: 100 * 1024 * 1024
+      });
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+    win?.webContents.send("update:downloaded");
+    logger.debug("[mock] Download complete");
+    return true;
+  }
   try {
+    downloading = true;
+    lastTransferred = 0;
+    resetStallWatch();
     await autoUpdater.downloadUpdate();
     return true;
   } catch (e) {
     logger.error(`install update error: ${e?.message}`);
+    downloading = false;
+    if (stallTimer) clearTimeout(stallTimer);
     return false;
   }
 });
 
 ipcMain.handle("app:confirm-install", async () => {
+  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+
+  if (isDev && process.env.MOCK_UPDATE === 'available') {
+    logger.debug("[mock] Simulating app restart for update install");
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "Mock Update",
+      message: "In production, app would restart now to install update v1.6.0",
+      buttons: ["OK"]
+    });
+    return true;
+  }
   try {
-    await clearAllSchedules();
+    logger.info("[autoUpdater] Installing update - preparing to quit");
+
+    stopCookieRefreshService();
+
+    BrowserWindow.getAllWindows().forEach(w => {
+      try {
+        w.destroy();
+      } catch (e) {
+        logger.warn(`Failed to destroy window: ${e?.message}`);
+      }
+    });
+
     app.removeAllListeners("window-all-closed");
-    app.quit();
+    logger.info("[autoUpdater] Calling quitAndInstall");
     autoUpdater.quitAndInstall(false, true);
+
     return true;
   } catch (e) {
     logger.error(`confirm install error: ${e?.message}`);
@@ -274,6 +347,12 @@ autoUpdater.on("download-progress", (p) => {
       1024
     ).toFixed(1)}MB / ${(p.total / 1024 / 1024).toFixed(1)}MB)`
   );
+
+  if (p.transferred > lastTransferred) {
+    lastTransferred = p.transferred;
+    resetStallWatch();
+  }
+
   win?.webContents.send("update:progress", {
     percent: p.percent,
     transferred: p.transferred,
@@ -284,12 +363,19 @@ autoUpdater.on("download-progress", (p) => {
 
 autoUpdater.on("update-downloaded", () => {
   logger.info("[autoUpdater] update downloaded, ready to install");
+  downloading = false;
+  if (stallTimer) clearTimeout(stallTimer);
   win?.webContents.send("update:downloaded");
+
+  win?.webContents.executeJavaScript(`sessionStorage.setItem('justUpdated', 'true')`).catch(() => { });
 });
 
 autoUpdater.on("error", (err) => {
   const msg = err?.message || String(err);
   logger.error(`[autoUpdater] error: ${msg}`);
+
+  downloading = false;
+  if (stallTimer) clearTimeout(stallTimer);
 
   let userMessage = "Lỗi khi kiểm tra cập nhật";
   if (msg.includes("ENOTFOUND") || msg.includes("ETIMEDOUT") || msg.includes("ECONNREFUSED")) {
@@ -307,6 +393,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: CONFIG.WINDOW_DEFAULT_WIDTH,
     height: CONFIG.WINDOW_DEFAULT_HEIGHT,
+    maxWidth: CONFIG.WINDOW_DEFAULT_WIDTH,
     maxHeight: CONFIG.WINDOW_MAX_HEIGHT,
     minHeight: CONFIG.WINDOW_MIN_HEIGHT,
     show: true,
@@ -351,8 +438,10 @@ function createWindow() {
   });
 
   win.on("close", (e) => {
-    e.preventDefault();
-    win.hide();
+    if (!app.isQuitting) {
+      e.preventDefault();
+      win.hide();
+    }
   });
 
   win.on("closed", () => (win = null));
@@ -376,6 +465,7 @@ function createWindow() {
 }
 
 async function createTray() {
+  const appVersion = app.getVersion();
   const iconPath = path.join(__dirname, "../app/assets/uneti.ico");
   let image = nativeImage.createFromPath(iconPath);
   if (image.isEmpty()) image = nativeImage.createEmpty();
@@ -445,42 +535,67 @@ async function createTray() {
       },
     },
     {
-      label: i18n.t("trayCheckUpdate"),
-      click: async () => {
-        try {
-          win?.webContents.send("update:checking");
-          const result = await checkForUpdate();
-          if (result.update) {
-            win?.webContents.send(
-              "toast-update",
-              `New update available (v${result.version}). Click to update.`
-            );
-          } else if (result.error) {
-            win?.webContents.send("update:error", "Lỗi khi kiểm tra cập nhật");
-          } else {
-            win?.webContents.send("update:not-available");
-          }
-        } catch (err) {
-          logger.error(`[Tray] Check update failed: ${err?.message}`);
-          win?.webContents.send("update:error", "Lỗi khi kiểm tra cập nhật");
-        }
-      },
-    },
-    {
       label: i18n.t("trayAbout"),
-      click: () => {
-        const appVersion = app.getVersion();
-        dialog.showMessageBox(win, {
-          type: "info",
-          title: i18n.t("aboutTitle"),
-          message: `Widget Lịch học UNETI v${appVersion}`,
-          detail: `${i18n.t("aboutDeveloper")}: Trần Kính Hoàng (hoaug)\n\n${i18n.t("aboutGitHub")}: hoaug-tran\nFacebook: hoaugtr\n${i18n.t("aboutEmail")}: hi@trkhoang.com\n\n© 2026 Trần Kính Hoàng. All rights reserved.`,
-          buttons: ["OK"]
-        });
+      submenu: [
+        {
+          label: `Widget Lịch học UNETI v${appVersion}`,
+          enabled: false
+        },
+        { type: "separator" },
+        {
+          label: `${i18n.t("aboutDeveloper")}: Trần Kính Hoàng (hoaug)`,
+          enabled: false
+        },
+        {
+          label: "GitHub: hoaug-tran",
+          click: () => {
+            shell.openExternal("https://github.com/hoaug-tran").catch(err => {
+              logger.error(`Failed to open GitHub: ${err?.message}`);
+            });
+          }
+        },
+        {
+          label: "Facebook: hoaugtr",
+          click: () => {
+            shell.openExternal("https://facebook.com/hoaugtr").catch(err => {
+              logger.error(`Failed to open Facebook: ${err?.message}`);
+            });
+          }
+        },
+        {
+          label: `${i18n.t("aboutEmail")}: hi@trkhoang.com`,
+          click: () => {
+            shell.openExternal("mailto:hi@trkhoang.com").catch(err => {
+              logger.error(`Failed to open email: ${err?.message}`);
+            });
+          }
+        },
+        { type: "separator" },
+        {
+          label: "© 2026 Trần Kính Hoàng",
+          enabled: false
+        }
+      ]
+    },
+    { type: "separator" },
+    {
+      label: i18n.t("trayAutoUpdate"),
+      type: "checkbox",
+      checked: store.get("autoUpdate", true),
+      click: (menuItem) => {
+        store.set("autoUpdate", menuItem.checked);
+        logger.info(`[Tray] Auto-update ${menuItem.checked ? 'enabled' : 'disabled'}`);
+        createTray();
       },
     },
     { type: "separator" },
-    { label: i18n.t("trayExit"), click: () => app.quit() },
+    {
+      label: i18n.t("trayExit"), click: () => {
+        app.isQuitting = true;
+        app.removeAllListeners("window-all-closed");
+        app.quit();
+      }
+    },
   ]);
   tray.setContextMenu(contextMenu);
 }
@@ -528,6 +643,30 @@ app.whenReady().then(async () => {
     logger.warn("[main] no cookies, must login first");
     win?.webContents.send("status", "Not logged in, please login.");
     win?.webContents.send("login-required");
+  }
+
+  const autoUpdateEnabled = store.get("autoUpdate", true);
+  if (autoUpdateEnabled && !isDev) {
+    setTimeout(async () => {
+      try {
+        logger.info("[autoUpdater] Checking for updates on startup");
+        await autoUpdater.checkForUpdates();
+      } catch (err) {
+        logger.warn(`[autoUpdater] initial check failed: ${err?.message}`);
+      }
+    }, 5000);
+
+    setInterval(async () => {
+      const isStillEnabled = store.get("autoUpdate", true);
+      if (isStillEnabled) {
+        try {
+          logger.info("[autoUpdater] Periodic update check (6h interval)");
+          await autoUpdater.checkForUpdates();
+        } catch (err) {
+          logger.warn(`[autoUpdater] periodic check failed: ${err?.message}`);
+        }
+      }
+    }, 6 * 60 * 60 * 1000);
   }
 
   if (app.isPackaged) {

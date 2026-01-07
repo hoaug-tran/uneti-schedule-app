@@ -33,3 +33,4 @@ Thumbs.db
 logs/
 
 .env
+run-with-local-server.ps1

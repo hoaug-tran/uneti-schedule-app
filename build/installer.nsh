@@ -14,3 +14,9 @@ Var MyLocalAppData
     RMDir "$MyLocalAppData\\Programs\\_installtest"
   ${EndIf}
 !macroend
+
+!macro customUnInstall
+  ; Delete Windows credentials stored by keytar
+  ; Target format: LegacyGeneric:target=uneti-schedule-app/cookies
+  nsExec::ExecToLog 'cmdkey /delete:LegacyGeneric:target=uneti-schedule-app/cookies'
+!macroend

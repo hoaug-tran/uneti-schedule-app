@@ -20,13 +20,37 @@ function createToast(html, { id, duration = 3000, clickable = false, type = "inf
     hideToast("refresh-reminder-toast");
   }
 
-  let toast = id ? document.getElementById(id) : null;
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.className = "toast";
-    if (id) toast.id = id;
-    document.body.appendChild(toast);
+  const existingToast = id ? document.getElementById(id) : null;
+  if (existingToast) {
+    existingToast.classList.remove("show");
+    setTimeout(() => {
+      existingToast.remove();
+
+      const toast = document.createElement("div");
+      toast.className = "toast";
+      if (id) toast.id = id;
+      document.body.appendChild(toast);
+
+      toast.classList.remove("toast-success", "toast-warning", "toast-error", "toast-info");
+      toast.classList.add(`toast-${type}`);
+
+      toast.innerHTML = html;
+      requestAnimationFrame(() => toast.classList.add("show"));
+      if (!clickable && duration > 0) {
+        setTimeout(() => {
+          toast.classList.remove("show");
+          setTimeout(() => toast.remove(), 250);
+        }, duration);
+      }
+    }, 250);
+    return existingToast;
   }
+
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  if (id) toast.id = id;
+  document.body.appendChild(toast);
+
   toast.classList.remove("toast-success", "toast-warning", "toast-error", "toast-info");
   toast.classList.add(`toast-${type}`);
 
@@ -184,7 +208,110 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
+let updateState = {
+  currentVersion: '',
+  newVersion: '',
+  hasPendingUpdate: false
+};
+
+function showUpdateToast(state, data = {}) {
+  const toastId = 'update-toast';
+
+  if (state === 'available' || state === 'checking') {
+    const existingToasts = document.querySelectorAll('.toast.show');
+    if (existingToasts.length > 0) {
+      console.log('[Update] Skipping toast, other toasts are visible');
+      if (state === 'available') {
+        updateState.hasPendingUpdate = true;
+        updateState.newVersion = data.newVersion;
+      }
+      return;
+    }
+  }
+
+  if (state === 'available') {
+    updateState.hasPendingUpdate = false;
+  }
+
+  let message = '';
+  let type = 'info';
+  let duration = 3000;
+  let clickable = false;
+
+  if (state === 'checking') {
+    message = i18n.t('updateChecking');
+    type = 'info';
+    duration = 0;
+  } else if (state === 'available') {
+    message = i18n.t('updateAvailableMessage').replace('{version}', data.newVersion || updateState.newVersion);
+    type = 'success';
+    duration = 6000; // Auto-dismiss after 6 seconds
+    clickable = true;
+  } else if (state === 'downloading') {
+    const percent = Math.round(data.progress || 0);
+    message = `${i18n.t('updateDownloading')}: ${percent}%`;
+    type = 'info';
+    duration = 0;
+  } else if (state === 'downloaded') {
+    message = i18n.t('updateDownloaded');
+    type = 'success';
+    duration = 0;
+  } else if (state === 'not-available') {
+    message = `${i18n.t('updateNotAvailable')} (v${data.version || updateState.currentVersion})`;
+    type = 'info';
+    duration = 3000;
+  } else if (state === 'error') {
+    message = i18n.t('updateError');
+    type = 'error';
+    duration = 4000;
+  }
+
+  const toast = createToast(message, {
+    id: toastId,
+    duration,
+    type
+  });
+
+  if (clickable && toast) {
+    toast.style.cursor = 'pointer';
+    toast.onclick = async () => {
+      hideToast(toastId);
+      showUpdateToast('downloading', { progress: 0 });
+      try {
+        await window.updateAPI?.install?.();
+      } catch (e) {
+        showUpdateToast('error');
+      }
+    };
+  }
+}
+
+window.addEventListener('focus', () => {
+  if (updateState.hasPendingUpdate) {
+    setTimeout(() => {
+      const existingToasts = document.querySelectorAll('.toast.show');
+      if (existingToasts.length === 0) {
+        showUpdateToast('available', { newVersion: updateState.newVersion });
+      }
+    }, 1000);
+  }
+});
+
+
+
 function registerIpcListeners() {
+  const justUpdated = sessionStorage.getItem('justUpdated');
+  if (justUpdated) {
+    sessionStorage.removeItem('justUpdated');
+    const version = window.appAPI?.getVersion?.() || '1.5.0';
+    setTimeout(() => {
+      createToast(i18n.t('updateSuccess').replace('{version}', version), {
+        id: 'update-success',
+        duration: 5000,
+        type: 'success'
+      });
+    }, 2000);
+  }
   if (window.statusAPI?.onStatus) {
     window.statusAPI.onStatus((msg) => setStatus(msg));
   }
@@ -196,14 +323,17 @@ function registerIpcListeners() {
 
       await render(window.dateAPI.weekKey(currentWeek));
 
-      if (Math.random() < 0.4) {
-        setTimeout(() => {
-          createToast(i18n.t("refreshReminder"), {
-            id: "refresh-reminder-toast",
-            duration: 6000,
-            type: "info"
-          });
-        }, 2000);
+      if (Math.random() < 0.1) {
+        const existingToasts = document.querySelectorAll('.toast.show');
+        if (existingToasts.length === 0) {
+          setTimeout(() => {
+            createToast(i18n.t("refreshReminder"), {
+              id: "refresh-reminder-toast",
+              duration: 6000,
+              type: "info"
+            });
+          }, 2000);
+        }
       }
     });
   }
@@ -222,157 +352,25 @@ function registerIpcListeners() {
     });
   }
 
-  let updateModal = null;
-  let updateState = {
-    currentVersion: '',
-    newVersion: '',
-    isDownloading: false,
-    progress: 0,
-    downloaded: 0,
-    total: 0
-  };
-
-  function showUpdateModal(state) {
-    hideUpdateModal();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'update-modal-overlay';
-    overlay.id = 'update-modal-overlay';
-
-    const modal = document.createElement('div');
-    modal.className = 'update-modal';
-
-    let content = '';
-
-    if (state === 'checking') {
-      content = `
-        <div class="update-header">${i18n.t('updateChecking')}</div>
-        <div class="update-status">${i18n.t('updateChecking')}</div>
-      `;
-    } else if (state === 'available') {
-      content = `
-        <div class="update-header">${i18n.t('updateAvailable')}</div>
-        <div class="update-version">
-          <div class="update-version-item">
-            <div class="update-version-label">${i18n.t('updateCurrentVersion')}</div>
-            <div class="update-version-number">v${updateState.currentVersion}</div>
-          </div>
-          <div class="update-version-item">
-            <div class="update-version-label">${i18n.t('updateNewVersion')}</div>
-            <div class="update-version-number">v${updateState.newVersion}</div>
-          </div>
-        </div>
-        <div class="update-buttons">
-          <button class="update-btn update-btn-secondary" id="update-later-btn">${i18n.t('updateLater')}</button>
-          <button class="update-btn update-btn-primary" id="update-now-btn">${i18n.t('updateNow')}</button>
-        </div>
-      `;
-    } else if (state === 'downloading') {
-      const percent = Math.round(updateState.progress);
-      const downloadedMB = (updateState.downloaded / 1024 / 1024).toFixed(1);
-      const totalMB = (updateState.total / 1024 / 1024).toFixed(1);
-
-      content = `
-        <div class="update-header">${i18n.t('updateDownloading')}</div>
-        <div class="update-progress-container">
-          <div class="update-progress-bar-bg">
-            <div class="update-progress-bar" style="width: ${percent}%"></div>
-          </div>
-          <div class="update-status">${percent}% (${downloadedMB} MB / ${totalMB} MB)</div>
-        </div>
-      `;
-    } else if (state === 'downloaded') {
-      content = `
-        <div class="update-header">${i18n.t('updateDownloaded')}</div>
-        <div class="update-status">${i18n.t('updateDownloaded')}</div>
-        <div class="update-buttons">
-          <button class="update-btn update-btn-secondary" id="update-later-btn">${i18n.t('updateLater')}</button>
-          <button class="update-btn update-btn-primary" id="update-restart-btn">${i18n.t('updateRestart')}</button>
-        </div>
-      `;
-    } else if (state === 'not-available') {
-      content = `
-        <div class="update-header">${i18n.t('updateNotAvailable')}</div>
-        <div class="update-status">${i18n.t('updateNotAvailable')}</div>
-        <div class="update-buttons">
-          <button class="update-btn update-btn-primary" id="update-close-btn">OK</button>
-        </div>
-      `;
-    } else if (state === 'error') {
-      content = `
-        <div class="update-header">${i18n.t('updateError')}</div>
-        <div class="update-status">${i18n.t('updateError')}</div>
-        <div class="update-buttons">
-          <button class="update-btn update-btn-primary" id="update-close-btn">OK</button>
-        </div>
-      `;
-    }
-
-    modal.innerHTML = content;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    updateModal = overlay;
-
-    const laterBtn = modal.querySelector('#update-later-btn');
-    const nowBtn = modal.querySelector('#update-now-btn');
-    const restartBtn = modal.querySelector('#update-restart-btn');
-    const closeBtn = modal.querySelector('#update-close-btn');
-
-    if (laterBtn) {
-      laterBtn.addEventListener('click', hideUpdateModal);
-    }
-
-    if (nowBtn) {
-      nowBtn.addEventListener('click', async () => {
-        nowBtn.disabled = true;
-        nowBtn.textContent = i18n.t('updateDownloading');
-        await window.updateAPI.install();
-      });
-    }
-
-    if (restartBtn) {
-      restartBtn.addEventListener('click', () => {
-        window.updateAPI.confirmInstall();
-      });
-    }
-
-    if (closeBtn) {
-      closeBtn.addEventListener('click', hideUpdateModal);
-    }
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay && state !== 'downloading') {
-        hideUpdateModal();
-      }
-    });
-  }
-
-  function hideUpdateModal() {
-    if (updateModal) {
-      updateModal.remove();
-      updateModal = null;
-    }
-  }
 
   window.updateAPI?.onUpdateToast?.((msg) => {
     const versionMatch = msg.match(/v([\d.]+)/);
     if (versionMatch) {
       updateState.newVersion = versionMatch[1];
       updateState.currentVersion = window.appAPI?.getVersion?.() || '1.5.0';
-      showUpdateModal('available');
+      showUpdateToast('available', { newVersion: versionMatch[1] });
     }
   });
 
   if (window.updateAPI?.onChecking) {
     window.updateAPI.onChecking(() => {
-      showUpdateModal('checking');
+      showUpdateToast('checking');
     });
   }
 
   if (window.updateAPI?.onNotAvailable) {
     window.updateAPI.onNotAvailable(() => {
-      showUpdateModal('not-available');
+      showUpdateToast('not-available');
     });
   }
 
@@ -381,18 +379,19 @@ function registerIpcListeners() {
     updateState.downloaded = p?.transferred ?? 0;
     updateState.total = p?.total ?? 0;
 
-    if (updateModal) {
-      showUpdateModal('downloading');
-    }
+    showUpdateToast('downloading', { progress: p.percent });
   });
 
   window.updateAPI?.onDownloaded?.(() => {
-    showUpdateModal('downloaded');
+    showUpdateToast('downloaded');
+    setTimeout(() => {
+      window.updateAPI.confirmInstall();
+    }, 3000);
   });
 
   window.updateAPI?.onError?.((msg) => {
     window.loggerAPI?.error(`[Update] Error: ${msg}`);
-    showUpdateModal('error');
+    showUpdateToast('error');
   });
 
   window.addEventListener("languagechange", async () => {
@@ -422,6 +421,8 @@ async function render(isoDate) {
 
     if (payload && payload.weekStart) {
       state = "ok";
+      currentWeek = new Date(payload.weekStart);
+      window.loggerAPI?.debug(`[render] Updated currentWeek to: ${currentWeek.toISOString()}`);
     } else if (hasCookies) {
       state = "expired";
       loginLabel = i18n.t("loginAgain");
@@ -627,41 +628,43 @@ async function render(isoDate) {
     if (btnUpdate) {
       window.loggerAPI?.debug("[btnUpdate] Attaching event handler");
       btnUpdate.onclick = async () => {
-        window.loggerAPI?.debug("[btnUpdate] Clicked, disabling button");
-        const old = btnUpdate.textContent;
+        window.loggerAPI?.debug("[btnUpdate] Clicked");
         btnUpdate.disabled = true;
-        btnUpdate.textContent = "...";
-        window.loggerAPI?.debug(`[btnUpdate] Button disabled: ${btnUpdate.disabled}`);
+
+        showUpdateToast('checking');
 
         try {
           const res = await window.updateAPI?.check?.();
           if (res?.update) {
-            showToast(`${i18n.t("newUpdate")} (v${res.version})`, "update-check-toast");
+            updateState.newVersion = res.version;
+            updateState.currentVersion = appVersionValue || '1.5.0';
+            showUpdateToast('available', { newVersion: res.version });
+          } else if (res?.error) {
+            showUpdateToast('error');
           } else {
-            showToast(i18n.t("noUpdate"), "update-check-toast");
+            showUpdateToast('not-available', { version: res.version });
           }
         } catch (e) {
-          showToast(i18n.t("checkError"), "check-update-toast");
+          showUpdateToast('error');
         } finally {
           btnUpdate.disabled = false;
-          btnUpdate.textContent = old;
           window.loggerAPI?.debug("[btnUpdate] Button re-enabled");
         }
       };
     }
     if (btnLogin) btnLogin.onclick = () => window.widgetAPI.login();
     if (btnRefresh) btnRefresh.onclick = async () => {
-      const old = btnRefresh.textContent;
       btnRefresh.disabled = true;
-      btnRefresh.textContent = "...";
+      createToast(i18n.t("fetchingWeek"), { id: "refresh-loading", duration: 0, type: "info" });
       try {
         await window.widgetAPI.refresh();
+        hideToast("refresh-loading");
         createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success" });
       } catch (e) {
+        hideToast("refresh-loading");
         createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error" });
       } finally {
         btnRefresh.disabled = false;
-        btnRefresh.textContent = old;
       }
     };
     if (btnHide) btnHide.onclick = () => window.widgetAPI.hide();
@@ -790,10 +793,7 @@ async function changeWeek(offset) {
     window.loggerAPI?.info(`[changeWeek] Network fetch SUCCESS, rendering new week`);
     currentWeek = new Date(payload.weekStart);
     await render(window.dateAPI.weekKey(currentWeek));
-
-    setTimeout(() => {
-      createToast(i18n.t("fetchSuccess"), { id: toastId, duration: 2500, type: "success" });
-    }, 100);
+    createToast(i18n.t("fetchSuccess"), { id: toastId, duration: 2500, type: "success" });
 
   } catch (err) {
     window.loggerAPI?.error(`[changeWeek] ERROR: ${err?.message}`, err);

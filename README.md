@@ -2,8 +2,8 @@
 
 Ứng dụng desktop giúp sinh viên UNETI xem lịch học nhanh và tiện lợi.
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
+![Version](https://img.shields.io/badge/version-1.5.2-16a34a?style=for-the-badge)
+![Platform](https://img.shields.io/badge/platform-Windows-2563eb?style=for-the-badge)
 
 ---
 
@@ -116,8 +116,9 @@ Chuột phải vào tray icon để mở menu:
 - **Khởi động cùng Windows**: Tự động chạy khi khởi động máy
 - **Xoá dữ liệu lịch**: Xoá lịch đã lưu (dùng khi lịch bị lỗi)
 - **Xoá dữ liệu người dùng (đăng xuất)**: Đăng xuất hoàn toàn
-- **Xem file log**: Xem file log (để debug khi có lỗi)
-- **Thông tin về app**: Xem version của app, thông tin của dev
+- **Xem nhật ký**: Xem file log (để debug khi có lỗi)
+- **Giới thiệu**: Xem version của app, thông tin của dev
+- **Tự động cập nhật**: Tự động cập nhật khi có phiên bản mới (mặc định bật)
 - **Thoát**: Thoát app
 
 ## FAQ

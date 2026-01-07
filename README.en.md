@@ -2,7 +2,7 @@
 
 A desktop app for UNETI students to check class schedules quickly and conveniently.
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
+[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/hoaug-tran/uneti-schedule-app)
 
 ---
@@ -116,7 +116,8 @@ Right-click tray icon to open menu:
 - **Clear Schedule Data**: Delete cached schedules (use when schedule is corrupted)
 - **Clear User Data (Logout)**: Complete logout
 - **View Logs**: View log file (for debugging errors)
-- **About App**: View version, developer info
+- **Introduce**: View version, developer info
+- **Auto Update**: Auto update when the app has a new version (enabled by default)
 - **Exit**: Quit app
 
 ## FAQ
