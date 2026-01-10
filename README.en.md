@@ -117,10 +117,10 @@ Right-click tray icon to open menu:
 
 - **Start with Windows**: Auto-run on computer startup
 - **Clear Schedule Data**: Delete cached schedules (use when schedule is corrupted)
-- **Clear User Data (Logout)**: Complete logout
+- **Logout**: Complete logout and remove all user data
 - **View Logs**: View log file (for debugging errors)
 - **Introduce**: View version, developer info
-- **Auto Update**: Auto update when the app has a new version (enabled by default)
+- **Auto Check Update**: Auto check update when the app has a new version (enabled by default)
 - **Exit**: Quit app
 
 ## FAQ
@@ -164,7 +164,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Crede
 1. Check internet connection
 2. Temporarily disable firewall/antivirus
 3. Restart app
-4. Right-click tray → Clear User Data → Try again
+4. Right-click tray → Logout → Try again
 
 ### Incorrect or Missing Schedule
 

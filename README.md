@@ -118,10 +118,10 @@ Chuột phải vào tray icon để mở menu:
 
 - **Khởi động cùng Windows**: Tự động chạy khi khởi động máy
 - **Xoá dữ liệu lịch**: Xoá lịch đã lưu (dùng khi lịch bị lỗi)
-- **Xoá dữ liệu người dùng (đăng xuất)**: Đăng xuất hoàn toàn
+- **Đăng xuất**: Đăng xuất tài khoản và xoá hoàn toàn dữ liệu người dùng
 - **Xem nhật ký**: Xem file log (để debug khi có lỗi)
 - **Giới thiệu**: Xem version của ứng dụng, thông tin của dev
-- **Tự động cập nhật**: Tự động cập nhật khi có phiên bản mới (mặc định bật)
+- **Tự động kiểm tra cập nhật**: Tự động kiểm tra cập nhật khi có phiên bản mới (mặc định bật)
 - **Thoát**: Thoát ứng dụng
 
 ## FAQ
@@ -164,7 +164,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 1. Kiểm tra kết nối internet
 2. Tắt firewall/antivirus tạm thời
 3. Tắt ứng dụng đi và mở lại
-4. Chuột phải tray → Xoá dữ liệu người dùng → Thử lại
+4. Chuột phải tray → Đăng xuất → Thử lại
 
 ### Lịch bị sai hoặc thiếu
 
