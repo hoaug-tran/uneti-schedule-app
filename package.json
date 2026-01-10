@@ -25,7 +25,8 @@
     "dotenv": "^17.2.3",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.6.2",
-    "keytar": "^7.9.0"
+    "keytar": "^7.9.0",
+    "lucide": "^0.562.0"
   },
   "build": {
     "appId": "com.hoaug.uneti.schedule",
