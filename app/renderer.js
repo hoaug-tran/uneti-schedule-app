@@ -8,6 +8,77 @@ let preFetchedWeek = null;
 
 const $ = (s, r = document) => r.querySelector(s);
 
+try {
+  const { ipcRenderer } = require('electron');
+  ipcRenderer.on('toast-warning', (event, i18nKey) => {
+    const showWarning = () => {
+      const message = i18n.t(i18nKey);
+      console.warn(`[renderer] Stale data warning: ${message}`);
+
+      if (typeof createToast === 'function') {
+        createToast(message, {
+          id: "stale-data-warning",
+          duration: 0,
+          type: "warning",
+          clickable: true
+        });
+      } else {
+        setTimeout(() => {
+          if (typeof createToast === 'function') {
+            createToast(message, {
+              id: "stale-data-warning",
+              duration: 0,
+              type: "warning",
+              clickable: true
+            });
+          }
+        }, 2000);
+      }
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showWarning);
+    } else {
+      showWarning();
+    }
+  });
+
+  ipcRenderer.on('toast-stale-logout', (event, i18nKey) => {
+    const showWarning = () => {
+      const message = i18n.t(i18nKey);
+      console.warn(`[renderer] Stale data - forced logout: ${message}`);
+
+      if (typeof createToast === 'function') {
+        createToast(message, {
+          id: "stale-data-logout",
+          duration: 8000,
+          type: "warning",
+          clickable: false
+        });
+      } else {
+        setTimeout(() => {
+          if (typeof createToast === 'function') {
+            createToast(message, {
+              id: "stale-data-logout",
+              duration: 8000,
+              type: "warning",
+              clickable: false
+            });
+          }
+        }, 2000);
+      }
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showWarning);
+    } else {
+      showWarning();
+    }
+  });
+} catch (e) {
+  console.warn(`Failed to setup toast-warning/logout listener: ${e?.message}`);
+}
+
 function setStatus(msg) {
   const el = $("#status");
   if (el) el.innerHTML = msg ?? "";
@@ -22,28 +93,7 @@ function createToast(html, { id, duration = 3000, clickable = false, type = "inf
 
   const existingToast = id ? document.getElementById(id) : null;
   if (existingToast) {
-    existingToast.classList.remove("show");
-    setTimeout(() => {
-      existingToast.remove();
-
-      const toast = document.createElement("div");
-      toast.className = "toast";
-      if (id) toast.id = id;
-      document.body.appendChild(toast);
-
-      toast.classList.remove("toast-success", "toast-warning", "toast-error", "toast-info");
-      toast.classList.add(`toast-${type}`);
-
-      toast.innerHTML = html;
-      requestAnimationFrame(() => toast.classList.add("show"));
-      if (!clickable && duration > 0) {
-        setTimeout(() => {
-          toast.classList.remove("show");
-          setTimeout(() => toast.remove(), 250);
-        }, duration);
-      }
-    }, 250);
-    return existingToast;
+    existingToast.remove();
   }
 
   const toast = document.createElement("div");
@@ -56,7 +106,7 @@ function createToast(html, { id, duration = 3000, clickable = false, type = "inf
 
   toast.innerHTML = html;
   requestAnimationFrame(() => toast.classList.add("show"));
-  if (!clickable && duration > 0) {
+  if (duration > 0) {
     setTimeout(() => {
       toast.classList.remove("show");
       setTimeout(() => toast.remove(), 250);
@@ -74,17 +124,6 @@ function hideToast(id) {
 
 function showToast(msg, id = "default-toast", type = "info") {
   createToast(msg, { id, type });
-}
-
-function fmtBytes(n) {
-  if (!Number.isFinite(n)) return "";
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${n.toFixed(1)} ${units[i]}`;
 }
 
 function byDay(data) {
@@ -179,7 +218,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   registerIpcListeners();
 
-  await render(window.dateAPI.weekKey(currentWeek));
+  window.loggerAPI?.debug("[DOMContentLoaded] Calling render...");
+  try {
+    await render(window.dateAPI.weekKey(currentWeek));
+    window.loggerAPI?.debug("[DOMContentLoaded] Render completed");
+  } catch (e) {
+    window.loggerAPI?.error(`[DOMContentLoaded] Render failed: ${e?.message}`, e);
+  }
 
   isOnline = await window.networkAPI?.isOnline?.();
   if (!isOnline) {
@@ -245,15 +290,26 @@ function showUpdateToast(state, data = {}) {
   } else if (state === 'available') {
     message = i18n.t('updateAvailableMessage').replace('{version}', data.newVersion || updateState.newVersion);
     type = 'success';
-    duration = 6000; // Auto-dismiss after 6 seconds
+    duration = 8000;
     clickable = true;
   } else if (state === 'downloading') {
     const percent = Math.round(data.progress || 0);
+    const downloadedMB = ((data.transferred || 0) / 1024 / 1024).toFixed(1);
+    const totalMB = ((data.total || 0) / 1024 / 1024).toFixed(1);
+    const speedMBps = ((data.bytesPerSecond || 0) / 1024 / 1024).toFixed(1);
+
     message = `${i18n.t('updateDownloading')}: ${percent}%`;
+    if (data.total) {
+      message += ` (${downloadedMB}/${totalMB} MB)`;
+    }
+    if (data.bytesPerSecond) {
+      message += ` - ${speedMBps} MB/s`;
+    }
+
     type = 'info';
     duration = 0;
   } else if (state === 'downloaded') {
-    message = i18n.t('updateDownloaded');
+    message = data?.countdown || i18n.t('updateDownloaded');
     type = 'success';
     duration = 0;
   } else if (state === 'not-available') {
@@ -269,7 +325,8 @@ function showUpdateToast(state, data = {}) {
   const toast = createToast(message, {
     id: toastId,
     duration,
-    type
+    type,
+    clickable
   });
 
   if (clickable && toast) {
@@ -379,14 +436,29 @@ function registerIpcListeners() {
     updateState.downloaded = p?.transferred ?? 0;
     updateState.total = p?.total ?? 0;
 
-    showUpdateToast('downloading', { progress: p.percent });
+    showUpdateToast('downloading', {
+      progress: p.percent,
+      transferred: p.transferred,
+      total: p.total,
+      bytesPerSecond: p.bytesPerSecond
+    });
   });
 
   window.updateAPI?.onDownloaded?.(() => {
-    showUpdateToast('downloaded');
+    let countdown = 5;
+    const updateCountdown = () => {
+      const message = `${i18n.t('updateDownloaded')} (${countdown}s)`;
+      showUpdateToast('downloaded', { countdown: message });
+      countdown--;
+      if (countdown >= 0) {
+        setTimeout(updateCountdown, 1000);
+      }
+    };
+    updateCountdown();
+
     setTimeout(() => {
       window.updateAPI.confirmInstall();
-    }, 3000);
+    }, 5000);
   });
 
   window.updateAPI?.onError?.((msg) => {
@@ -635,6 +707,9 @@ async function render(isoDate) {
 
         try {
           const res = await window.updateAPI?.check?.();
+
+          hideToast('update-toast');
+
           if (res?.update) {
             updateState.newVersion = res.version;
             updateState.currentVersion = appVersionValue || '1.5.0';
@@ -645,6 +720,7 @@ async function render(isoDate) {
             showUpdateToast('not-available', { version: res.version });
           }
         } catch (e) {
+          hideToast('update-toast');
           showUpdateToast('error');
         } finally {
           btnUpdate.disabled = false;
@@ -700,8 +776,9 @@ async function render(isoDate) {
 
     const statusEl = document.getElementById("status");
     if (statusEl) statusEl.style.display = "none";
+
     const overlay = document.getElementById("loading-overlay");
-    if (overlay && state !== "first") {
+    if (overlay) {
       setTimeout(() => {
         overlay.style.opacity = "0";
         setTimeout(() => {
@@ -709,8 +786,6 @@ async function render(isoDate) {
           safeResize();
         }, 300);
       }, 500);
-    } else if (overlay && state === "first" && !payload && !hasCookies) {
-      overlay.style.display = "none";
     }
   } catch (e) {
     el.innerHTML = `<div class="empty">${i18n.t("renderError")} ${e?.message ?? e}</div>`;

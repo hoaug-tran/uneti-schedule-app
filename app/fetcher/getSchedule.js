@@ -37,6 +37,9 @@ async function postWeek(cookieHeader, body, label) {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html",
+        "Origin": "https://sinhvien.uneti.edu.vn",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
         Cookie: cookieHeader,
       },
       body,
@@ -140,7 +143,44 @@ function extractOffsets(html) {
   return { prev: null, current: null, next: null };
 }
 
-function validateOffsets(offsets) {
+async function refreshSession(cookieHeader) {
+  try {
+    logger.info("[refreshSession] Attempting to refresh server session");
+
+    const now = new Date();
+    const currentDate = dateToDMY(now);
+
+    const res = await withTimeout(
+      fetch(CONFIG.UNETI_SCHEDULE_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+          "Referer": "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html",
+          "Origin": "https://sinhvien.uneti.edu.vn",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Cookie: cookieHeader,
+        },
+        body: `pNgayHienTai=${encodeURIComponent(currentDate)}&pLoaiLich=0`,
+      }),
+      CONFIG.HTTP_TIMEOUT_MS,
+      "session-refresh"
+    );
+
+    if (res.ok) {
+      logger.info(`[refreshSession] Session refreshed successfully with date: ${currentDate}`);
+      return true;
+    } else {
+      logger.warn(`[refreshSession] Failed with status ${res.status}`);
+      return false;
+    }
+  } catch (err) {
+    logger.warn(`[refreshSession] Error: ${err?.message}`);
+    return false;
+  }
+}
+
+function validateOffsets(offsets, allowStale = false) {
   if (!offsets?.current) return true;
 
   try {
@@ -149,10 +189,37 @@ function validateOffsets(offsets) {
     const diffMs = Math.abs(now - currentWeek);
     const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
-    if (diffDays > 90) {
+    const MAX_STALE_DAYS = 180;
+    const WARN_STALE_DAYS = 120;
+    const REFRESH_THRESHOLD_DAYS = 60;
+
+    // Check from most severe to least severe
+    if (diffDays > MAX_STALE_DAYS) {
       logger.warn(`[validateOffsets] Server returned stale week: ${offsets.current} (${Math.round(diffDays)} days old)`);
+
+      if (allowStale) {
+        logger.info(`[validateOffsets] Allowing stale data due to allowStale flag`);
+        return true;
+      }
+
+      logger.error(`[validateOffsets] Data too stale (>${MAX_STALE_DAYS} days), refresh won't help - need re-login`);
       return false;
     }
+
+    if (diffDays > WARN_STALE_DAYS) {
+      logger.warn(`[validateOffsets] Week data is ${Math.round(diffDays)} days old - session likely expired, will force logout`);
+      return "stale";
+    }
+
+    if (diffDays > REFRESH_THRESHOLD_DAYS) {
+      logger.warn(`[validateOffsets] Week data is ${Math.round(diffDays)} days old (will attempt refresh)`);
+      return "stale";
+    }
+
+    if (diffDays > 30) {
+      logger.info(`[validateOffsets] Week data is ${Math.round(diffDays)} days old (still valid)`);
+    }
+
     return true;
   } catch (err) {
     logger.warn(`[validateOffsets] Failed to validate: ${err?.message}`);
@@ -225,9 +292,38 @@ export async function getSchedule(offset = 0, baseDate = null) {
       logger.debug(`[getSchedule] fragment length: ${fragment.length}`);
       if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
       lastOffsets = extractOffsets(fragment);
-      if (!validateOffsets(lastOffsets)) {
-        throw new Error("Cookie expired or stale session");
+      const validation = validateOffsets(lastOffsets);
+
+      if (validation === "stale" || validation === false) {
+        logger.warn("[getSchedule] baseDate: Detected stale data, attempting session refresh");
+        const refreshed = await refreshSession(cookieHeader);
+
+        if (refreshed) {
+          logger.info("[getSchedule] baseDate: Session refreshed, retrying");
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          const retryFragment = await postWeek(
+            cookieHeader,
+            `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
+            `week:${target}-retry`
+          );
+
+          if (looksLoggedOut(retryFragment)) throw new Error("Cookie expired");
+          lastOffsets = extractOffsets(retryFragment);
+
+          if (!validateOffsets(lastOffsets, true)) {
+            logger.error("[getSchedule] baseDate: Still stale after refresh");
+            throw new Error("Cookie expired or stale session");
+          }
+
+          if (!lastOffsets.current) lastOffsets.current = target;
+          logger.debug("[getSchedule] baseDate: offsets after retry:", lastOffsets);
+          return await processFragment(retryFragment, target, lastOffsets);
+        } else if (validation === false) {
+          throw new Error("Cookie expired or stale session");
+        }
       }
+
       if (!lastOffsets.current) lastOffsets.current = target;
       logger.debug("[getSchedule] offsets:", lastOffsets);
       return await processFragment(fragment, target, lastOffsets);
@@ -246,10 +342,57 @@ export async function getSchedule(offset = 0, baseDate = null) {
     if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
 
     lastOffsets = extractOffsets(fragment);
-    if (!validateOffsets(lastOffsets)) {
-      throw new Error("Cookie expired or stale session");
+    const validation = validateOffsets(lastOffsets);
+
+    if (validation === "stale" || validation === false) {
+      logger.warn("[getSchedule] Detected stale data, attempting session refresh");
+      const refreshed = await refreshSession(cookieHeader);
+
+      if (refreshed) {
+        logger.info("[getSchedule] Session refreshed, retrying fetch");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const retryFragment = await postWeek(
+          cookieHeader,
+          "pNgayHienTai=&pLoaiLich=0",
+          "week:current-retry"
+        );
+
+        if (looksLoggedOut(retryFragment)) throw new Error("Cookie expired");
+
+        lastOffsets = extractOffsets(retryFragment);
+        const retryValidation = validateOffsets(lastOffsets, true);
+
+        const isStillStale = retryValidation === "stale" || retryValidation === false;
+
+        if (isStillStale) {
+          logger.warn("[getSchedule] Data still stale after refresh - server session locked to old data");
+        }
+
+        target = lastOffsets.current;
+        if (!target) {
+          logger.warn(`[getSchedule] target invalid after retry: ${target}`);
+          return null;
+        }
+
+        const result = await processFragment(retryFragment, target, lastOffsets);
+
+        if (isStillStale && result) {
+          result.staleWarning = true;
+          result.staleMessage = "staleDataWarning";
+          logger.warn("[getSchedule] Returning stale data with warning");
+        }
+
+        return result;
+      } else {
+        logger.warn("[getSchedule] Session refresh failed");
+        if (validation === false) {
+          throw new Error("Cookie expired or stale session");
+        }
+      }
     }
-    logger.debug("[getSchedule] offsets:", lastOffsets);
+
+    logger.debug("getSchedule] offsets:", lastOffsets);
 
     target = lastOffsets.current;
     if (!target) {
@@ -293,9 +436,38 @@ export async function getSchedule(offset = 0, baseDate = null) {
   if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
 
   lastOffsets = extractOffsets(fragment);
-  if (!validateOffsets(lastOffsets)) {
-    throw new Error("Cookie expired or stale session");
+  const validation = validateOffsets(lastOffsets);
+
+  if (validation === "stale" || validation === false) {
+    logger.warn("[getSchedule] offset: Detected stale data, attempting session refresh");
+    const refreshed = await refreshSession(cookieHeader);
+
+    if (refreshed) {
+      logger.info("[getSchedule] offset: Session refreshed, retrying");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const retryFragment = await postWeek(
+        cookieHeader,
+        `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
+        `week:${target}-retry`
+      );
+
+      if (looksLoggedOut(retryFragment)) throw new Error("Cookie expired");
+      lastOffsets = extractOffsets(retryFragment);
+
+      if (!validateOffsets(lastOffsets, true)) {
+        logger.error("[getSchedule] offset: Still stale after refresh");
+        throw new Error("Cookie expired or stale session");
+      }
+
+      if (!lastOffsets.current) lastOffsets.current = target;
+      logger.debug("[getSchedule] offset: offsets after retry:", lastOffsets);
+      return await processFragment(retryFragment, target, lastOffsets);
+    } else if (validation === false) {
+      throw new Error("Cookie expired or stale session");
+    }
   }
+
   if (!lastOffsets.current) lastOffsets.current = target;
 
   logger.debug("[getSchedule] new offsets:", lastOffsets);

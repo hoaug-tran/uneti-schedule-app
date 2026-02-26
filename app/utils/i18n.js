@@ -47,10 +47,10 @@ const TRANSLATIONS = {
     noDataForWeek: "Không có dữ liệu cho tuần này",
     trayStartWithWindows: "Khởi động cùng Windows",
     trayClearSchedule: "Xoá dữ liệu lịch",
-    trayClearUserData: "Xoá dữ liệu người dùng (Đăng xuất)",
+    trayClearUserData: "Đăng xuất",
     trayViewLogs: "Xem nhật ký",
     trayAbout: "Giới thiệu",
-    trayAutoUpdate: "Tự động cập nhật",
+    trayAutoUpdate: "Tự động kiểm tra cập nhật",
     trayExit: "Thoát",
     refreshReminder: "💡 Để đảm bảo lịch luôn chính xác, bạn nên bấm Làm mới thường xuyên",
     aboutTitle: "Về Widget Lịch học UNETI",
@@ -73,6 +73,7 @@ const TRANSLATIONS = {
     updateCurrentVersion: "Phiên bản hiện tại",
     updateNewVersion: "Phiên bản mới",
     trayCheckUpdate: "Kiểm tra cập nhật",
+    staleDataWarning: "⚠️ Dữ liệu lịch có thể đã cũ. Vui lòng Đăng xuất và Đăng nhập lại để làm mới.",
   },
   en: {
     title: "UNETI Schedule",
@@ -119,7 +120,7 @@ const TRANSLATIONS = {
     trayClearUserData: "Clear User Data (Logout)",
     trayViewLogs: "View Logs",
     trayAbout: "About",
-    trayAutoUpdate: "Auto Update",
+    trayAutoUpdate: "Auto CheckUpdate",
     trayExit: "Exit",
     refreshReminder: "💡 To ensure schedule accuracy, please refresh regularly",
     aboutTitle: "About UNETI Schedule Widget",
@@ -141,6 +142,7 @@ const TRANSLATIONS = {
     updateCurrentVersion: "Current version",
     updateNewVersion: "New version",
     trayCheckUpdate: "Check for Updates",
+    staleDataWarning: "⚠️ Schedule data may be outdated. Please Logout and Login again to refresh.",
   },
 };
 
