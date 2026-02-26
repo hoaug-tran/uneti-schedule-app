@@ -41,7 +41,15 @@ import { logger } from "../app/utils/logger.js";
 import { store } from "../app/utils/store.js";
 
 const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
-if (isDev && process.env.USE_LOCAL_UPDATE_SERVER === "true") {
+
+if (process.env.USE_LOCAL_UPDATE_SERVER === "true") {
+  const serverUrl = process.env.LOCAL_UPDATE_SERVER_URL || "http://localhost:8080";
+  autoUpdater.setFeedURL({
+    provider: "generic",
+    url: serverUrl
+  });
+  logger.info(`[autoUpdater] Using local update server: ${serverUrl}`);
+} else if (isDev) {
   autoUpdater.setFeedURL({
     provider: "generic",
     url: "http://localhost:8080"
@@ -276,8 +284,8 @@ ipcMain.handle("app:confirm-install", async () => {
     });
 
     app.removeAllListeners("window-all-closed");
-    logger.info("[autoUpdater] Calling quitAndInstall");
-    autoUpdater.quitAndInstall(false, true);
+    logger.info("[autoUpdater] Calling quitAndInstall (silent mode)");
+    autoUpdater.quitAndInstall(true, true);
 
     return true;
   } catch (e) {
@@ -633,11 +641,43 @@ app.whenReady().then(async () => {
     logger.info("[main] Cookies found, fetching schedule");
     startCookieRefreshService();
     try {
-      await getSchedule(0);
-      await getSchedule(1);
+      const result0 = await getSchedule(0);
+      const result1 = await getSchedule(1);
+
+      // Check if any result has stale warning
+      if (result0?.staleWarning || result1?.staleWarning) {
+        const i18nKey = result0?.staleMessage || result1?.staleMessage || "staleDataWarning";
+        logger.warn(`[main] Stale data detected - forcing logout: ${i18nKey}`);
+
+        // Force logout: clear cookies and show login UI
+        const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
+        await clearAllCookies();
+        stopCookieRefreshService();
+
+        // Send login-required to show login UI
+        win?.webContents.send("login-required");
+        win?.webContents.send("reload");
+
+        // Send toast warning with 8 second duration
+        win?.webContents.send("toast-stale-logout", i18nKey);
+
+        return; // Don't continue with stale data
+      }
+
       logger.info("[main] fetched schedule in background");
     } catch (err) {
-      logger.warn(`[main] fetch in background failed: ${err?.message}`);
+      const errMsg = err?.message || String(err);
+      logger.warn(`[main] fetch in background failed: ${errMsg}`);
+
+      if (errMsg.includes("Cookie expired") || errMsg.includes("stale session")) {
+        logger.warn("[main] Session expired, requiring re-login");
+        win?.webContents.send("status", "Session expired, please login again.");
+        win?.webContents.send("login-required");
+        win?.webContents.send("reload"); // Trigger render to show login UI
+      } else {
+        // Other errors - still try to show cached data
+        win?.webContents.send("reload");
+      }
     }
   } else {
     logger.warn("[main] no cookies, must login first");
@@ -650,40 +690,74 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       try {
         logger.info("[autoUpdater] Checking for updates on startup");
-        await autoUpdater.checkForUpdates();
+        const timeoutMs = 10000;
+        const withTimeout = (promise, ms) =>
+          Promise.race([
+            promise,
+            new Promise((resolve) =>
+              setTimeout(() => resolve({ timeout: true }), ms)
+            ),
+          ]);
+
+        const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
+
+        if (result?.timeout) {
+          logger.warn("[autoUpdater] Startup check timed out after 10s");
+          return;
+        }
+
+        if (
+          result?.updateInfo?.version &&
+          result.updateInfo.version !== app.getVersion()
+        ) {
+          logger.info(`[autoUpdater] Update available on startup: v${result.updateInfo.version}`);
+          win?.webContents.send(
+            "toast-update",
+            `New update available (v${result.updateInfo.version}). Click to update.`
+          );
+        } else {
+          logger.info("[autoUpdater] No update available on startup");
+        }
       } catch (err) {
         logger.warn(`[autoUpdater] initial check failed: ${err?.message}`);
       }
-    }, 5000);
+    }, 15000);
 
     setInterval(async () => {
       const isStillEnabled = store.get("autoUpdate", true);
       if (isStillEnabled) {
         try {
           logger.info("[autoUpdater] Periodic update check (6h interval)");
-          await autoUpdater.checkForUpdates();
+
+          const timeoutMs = 10000;
+          const withTimeout = (promise, ms) =>
+            Promise.race([
+              promise,
+              new Promise((resolve) =>
+                setTimeout(() => resolve({ timeout: true }), ms)
+              ),
+            ]);
+
+          const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
+
+          if (result?.timeout) {
+            logger.warn("[autoUpdater] Periodic check timed out after 10s");
+            return;
+          }
+
+          if (
+            result?.updateInfo?.version &&
+            result.updateInfo.version !== app.getVersion()
+          ) {
+            logger.info(`[autoUpdater] Update available (periodic): v${result.updateInfo.version}`);
+          } else {
+            logger.info("[autoUpdater] No update available (periodic)");
+          }
         } catch (err) {
           logger.warn(`[autoUpdater] periodic check failed: ${err?.message}`);
         }
       }
     }, 6 * 60 * 60 * 1000);
-  }
-
-  if (app.isPackaged) {
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      if (
-        result?.updateInfo?.version &&
-        result.updateInfo.version !== app.getVersion()
-      ) {
-        win?.webContents.send(
-          "toast-update",
-          `New update available (v${result.updateInfo.version}). Click to update.`
-        );
-      }
-    } catch (e) {
-      logger.warn(`[autoUpdater] initial check failed: ${e?.message}`);
-    }
   }
 
   function inActiveHours() {
@@ -698,7 +772,13 @@ app.whenReady().then(async () => {
       await getSchedule(1);
       win?.webContents.send("reload");
     } catch (err) {
-      logger.warn(`[main] autoRefresh current week failed: ${err?.message}`);
+      const errMsg = err?.message || String(err);
+      logger.warn(`[main] autoRefresh current week failed: ${errMsg}`);
+
+      if (errMsg.includes("Cookie expired") || errMsg.includes("stale session")) {
+        logger.warn("[main] autoRefresh detected expired session");
+        win?.webContents.send("login-required");
+      }
     }
   }, CONFIG.AUTO_REFRESH_INTERVAL_MS);
 
@@ -708,7 +788,13 @@ app.whenReady().then(async () => {
       await getSchedule(1);
       win?.webContents.send("reload");
     } catch (err) {
-      logger.warn(`[main] autoRefresh next week failed: ${err?.message}`);
+      const errMsg = err?.message || String(err);
+      logger.warn(`[main] autoRefresh next week failed: ${errMsg}`);
+
+      if (errMsg.includes("Cookie expired") || errMsg.includes("stale session")) {
+        logger.warn("[main] autoRefresh next week detected expired session");
+        win?.webContents.send("login-required");
+      }
     }
   }, CONFIG.AUTO_REFRESH_NEXT_WEEK_MS);
 

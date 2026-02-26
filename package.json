@@ -10,6 +10,7 @@
     "fetch": "node app/fetcher/getSchedule.js",
     "dev": "cross-env NODE_ENV=development electron main/main.js",
     "build": "electron-builder",
+    "postbuild": "node fix-latest-yml.cjs",
     "update-server": "http-server ./dist -p 8080 --cors"
   },
   "devDependencies": {
@@ -67,6 +68,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
+      "allowElevation": true,
       "deleteAppDataOnUninstall": true,
       "license": "build/license.txt",
       "include": "build/installer.nsh",
@@ -74,7 +76,7 @@
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Widget lịch học UNETI",
-      "menuCategory": true,
+      "menuCategory": false,
       "displayLanguageSelector": false
     }
   }

@@ -34,4 +34,4 @@ Thumbs.db
 logs/
 
 .env
-run-with-local-server.ps1
+TEST_UPDATE_SERVER.md
