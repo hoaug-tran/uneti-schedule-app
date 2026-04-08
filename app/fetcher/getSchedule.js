@@ -1,7 +1,8 @@
 import { weekKey } from "../utils/date.js";
 import * as cheerio from "cheerio";
 import { parseScheduleFromFragment } from "./parseScheduleFromFragment.js";
-import { buildCookieHeader } from "./cookieManager.js";
+import { getCookiePartition } from "./cookieManager.js";
+import { postViaWindow } from "./fetchViaWindow.js";
 import {
   saveSchedule,
   loadSchedule,
@@ -30,34 +31,16 @@ function withTimeout(promise, ms = CONFIG.HTTP_TIMEOUT_MS, label = "request") {
     );
   });
 }
-async function postWeek(cookieHeader, body, label) {
-  const res = await withTimeout(
-    fetch(CONFIG.UNETI_SCHEDULE_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html",
-        "Origin": "https://sinhvien.uneti.edu.vn",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-        Cookie: cookieHeader,
-      },
-      body,
-    }),
+
+async function postWeek(_unused, body, label) {
+  // Dùng fetchViaWindow — chạy fetch trong Chromium renderer thật để bypass Cloudflare
+  return withTimeout(
+    postViaWindow(body, label),
     CONFIG.HTTP_TIMEOUT_MS,
     label
   );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(
-      `HTTP ${res.status} when fetching schedule (${label}). ${txt.slice(
-        0,
-        120
-      )}`
-    );
-  }
-  return res.text();
 }
+
 
 function dmyToDate(s) {
   const [dd, mm, yyyy] = s.split("/").map((n) => parseInt(n, 10));
@@ -73,6 +56,15 @@ function dateToDMY(d) {
 
 function looksLoggedOut(html) {
   try {
+    if (
+      html.includes("Just a moment") ||
+      html.includes("Performing security verification") ||
+      html.includes("cf-browser-verification") ||
+      html.includes("cf_clearance")
+    ) {
+      return true;
+    }
+
     const $ = cheerio.load(html);
     const hasLogout =
       $('a[href*="DangXuat"]').length > 0 ||
@@ -102,6 +94,7 @@ function looksLoggedOut(html) {
     return false;
   }
 }
+
 
 function extractOffsets(html) {
   const $ = cheerio.load(html);
@@ -143,7 +136,7 @@ function extractOffsets(html) {
   return { prev: null, current: null, next: null };
 }
 
-async function refreshSession(cookieHeader) {
+async function refreshSession() {
   try {
     logger.info("[refreshSession] Attempting to refresh server session");
 
@@ -151,15 +144,13 @@ async function refreshSession(cookieHeader) {
     const currentDate = dateToDMY(now);
 
     const res = await withTimeout(
-      fetch(CONFIG.UNETI_SCHEDULE_ENDPOINT, {
+      sessionFetch(CONFIG.UNETI_SCHEDULE_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
           "X-Requested-With": "XMLHttpRequest",
           "Referer": "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html",
           "Origin": "https://sinhvien.uneti.edu.vn",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          Cookie: cookieHeader,
         },
         body: `pNgayHienTai=${encodeURIComponent(currentDate)}&pLoaiLich=0`,
       }),
@@ -193,7 +184,6 @@ function validateOffsets(offsets, allowStale = false) {
     const WARN_STALE_DAYS = 120;
     const REFRESH_THRESHOLD_DAYS = 60;
 
-    // Check from most severe to least severe
     if (diffDays > MAX_STALE_DAYS) {
       logger.warn(`[validateOffsets] Server returned stale week: ${offsets.current} (${Math.round(diffDays)} days old)`);
 
@@ -271,9 +261,14 @@ async function processFragment(fragment, target, offsets) {
 export async function getSchedule(offset = 0, baseDate = null) {
   logger.debug(`[getSchedule] start offset: ${offset} baseDate: ${baseDate}`);
 
-  const cookieHeader = await buildCookieHeader();
-  if (!cookieHeader) throw new Error("No cookies");
-  logger.debug(`[getSchedule] cookie header length: ${cookieHeader.length}`);
+  let hasSessCookie = false;
+  try {
+    const { session } = await import("electron");
+    const ses = session.fromPartition(getCookiePartition());
+    const cookies = await ses.cookies.get({ domain: CONFIG.UNETI_DOMAIN });
+    hasSessCookie = cookies && cookies.length > 0;
+  } catch { }
+  if (!hasSessCookie) throw new Error("No cookies");
 
   let target;
 
@@ -285,7 +280,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
       ).padStart(2, "0")}/${d.getFullYear()}`;
       logger.debug(`[getSchedule] using baseDate as target: ${target}`);
       const fragment = await postWeek(
-        cookieHeader,
+        null,
         `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
         `week:${target}`
       );
@@ -296,14 +291,14 @@ export async function getSchedule(offset = 0, baseDate = null) {
 
       if (validation === "stale" || validation === false) {
         logger.warn("[getSchedule] baseDate: Detected stale data, attempting session refresh");
-        const refreshed = await refreshSession(cookieHeader);
+        const refreshed = await refreshSession();
 
         if (refreshed) {
           logger.info("[getSchedule] baseDate: Session refreshed, retrying");
           await new Promise(resolve => setTimeout(resolve, 1000));
 
           const retryFragment = await postWeek(
-            cookieHeader,
+            null,
             `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
             `week:${target}-retry`
           );
@@ -334,7 +329,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
 
   if (offset === 0) {
     const fragment = await postWeek(
-      cookieHeader,
+      null,
       "pNgayHienTai=&pLoaiLich=0",
       "week:current"
     );
@@ -346,14 +341,14 @@ export async function getSchedule(offset = 0, baseDate = null) {
 
     if (validation === "stale" || validation === false) {
       logger.warn("[getSchedule] Detected stale data, attempting session refresh");
-      const refreshed = await refreshSession(cookieHeader);
+      const refreshed = await refreshSession();
 
       if (refreshed) {
         logger.info("[getSchedule] Session refreshed, retrying fetch");
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         const retryFragment = await postWeek(
-          cookieHeader,
+          null,
           "pNgayHienTai=&pLoaiLich=0",
           "week:current-retry"
         );
@@ -428,7 +423,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
   }
 
   const fragment = await postWeek(
-    cookieHeader,
+    null,
     `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
     `week:${target}`
   );
@@ -440,14 +435,14 @@ export async function getSchedule(offset = 0, baseDate = null) {
 
   if (validation === "stale" || validation === false) {
     logger.warn("[getSchedule] offset: Detected stale data, attempting session refresh");
-    const refreshed = await refreshSession(cookieHeader);
+    const refreshed = await refreshSession();
 
     if (refreshed) {
       logger.info("[getSchedule] offset: Session refreshed, retrying");
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       const retryFragment = await postWeek(
-        cookieHeader,
+        null,
         `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
         `week:${target}-retry`
       );

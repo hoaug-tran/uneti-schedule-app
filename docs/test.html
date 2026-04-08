@@ -1,0 +1,301 @@
+<div id="viewLichTheoTuan">
+<style>
+    .box-zoom a {
+        font-size: 11px;
+        padding: 2px 5px;
+        margin-top: 15px !important;
+        width: 100%;
+    }
+
+        .box-zoom a:hover {
+            background-color: #f36a5a !important;
+            border-color: red !important;
+        }
+
+    .box-zoom i {
+        font-size: 11px !important;
+    }
+
+    .tooltip > .tooltip-inner {
+        border: 1px solid #c1c1c1;
+        padding: 10px;
+        max-width: 450px;
+        color: black;
+        text-align: left;
+        background-color: rgba(255, 255, 200,1);
+        background: rgba(255, 255, 200,1);
+        opacity: 1;
+        filter: alpha(opacity=100);
+        border-radius: 6px !important;
+        box-shadow: 3px 2px 4px 0px #c7c3c3;
+    }
+
+    .tooltip > .tooltip-arrow {
+        border-bottom-color: black;
+    }
+
+    .color-lichthi-chinhthuc {
+        background-color: #e8ffe1 !important;
+        border: 1px solid #c9d0db !important;
+    }
+    /*#region Menu */
+    .wp-menu-hover {
+        text-align: right;
+        color: #003763;
+    }
+
+        .wp-menu-hover .btn-func {
+            display: inline-block;
+            border: 1px solid #d9dee4;
+            width: 15px;
+            height: 20px;
+            text-align: center;
+            justify-content: center;
+            border-radius: 3px !important;
+            cursor: pointer;
+            position: relative;
+            background-color: #fff;
+        }
+
+            .wp-menu-hover .btn-func .sub-menu {
+                position: absolute;
+                left: 10px;
+                background-color: #fff;
+                border: 1px solid #eee;
+                list-style: none;
+                padding-left: 0;
+                box-shadow: 0 0 15px 1px rgb(69 65 78 / 20%);
+                margin-bottom: 0;
+                padding: 10px;
+                width: 180px;
+                visibility: hidden;
+                transition: 0.2s;
+                z-index: 10;
+                opacity: 0;
+                transition: visibility 0s, opacity 0.2s linear;
+                text-align: left;
+            }
+
+            .wp-menu-hover .btn-func:hover .sub-menu {
+                opacity: 1;
+                visibility: visible;
+                border-radius: 5px !important;
+            }
+
+    .sub-menu li {
+        padding: 3px 0;
+        font-size: 14px;
+    }
+    /*#endregion Menu */
+</style>
+
+    <span hidden="" id="warningPhongHoc" name="warningPhongHoc" lang="lichtheotuan-warningPhongHoc">Phòng học chưa được khởi tạo</span>
+    <span hidden="" id="warningGVNotFound" name="warningGVNotFound" lang="lichtheotuan-warningGVNotFound">Không tìm thấy thông tin</span>
+    <span hidden="" id="popupThongTinGV" name="popupThongTinGV" lang="lichtheotuan-popupThongTinGV">Thông tin giảng viên</span>
+    <span hidden="" id="popupHoTenGV" name="popupHoTenGV" lang="lichtheotuan-popupHoTenGV">Họ tên</span>
+    <span hidden="" id="popupSDTGV" name="popupSDTGV" lang="lichtheotuan-popupSDTGV">Số điện thoại</span>
+    <span hidden="" id="popupEmailGV" name="popupEmailGV" lang="lichtheotuan-popupEmailGV">Email</span>
+    <div class="table-responsive">
+        <table class="fl-table table table-bordered text-center no-footer dtr-inline" width="100%" role="grid">
+            <thead>
+                <tr role="row">
+                    <th lang="lichtheotuan-cahoc">Ca học</th>
+                    <th><span lang="lichtheotuan-mon">Thứ 2</span><br>06/04/2026</th>
+                    <th><span lang="lichtheotuan-tue">Thứ 3</span><br>07/04/2026</th>
+                    <th><span lang="lichtheotuan-wed">Thứ 4</span><br>08/04/2026</th>
+                    <th><span lang="lichtheotuan-thu">Thứ 5</span><br>09/04/2026</th>
+                    <th><span lang="lichtheotuan-fri">Thứ 6</span><br>10/04/2026</th>
+                    <th><span lang="lichtheotuan-sat">Thứ 7</span><br>11/04/2026</th>
+                    <th><span lang="lichtheotuan-sun">Chủ nhật</span><br>12/04/2026</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr role="row">
+                    <td lang="lichtheotuan-buoisang"><b>Sáng</b></td>
+                            <td>
+                                        <div class="content color-lichhoc text-start" data-bg="914159" style="background-color:#71cb35;border-color:#c9d0db;text-align:left">
+
+                                                <b><a href="javascript:" target="" style="text-decoration:none;color: #003763;" data-bs-toggle="tooltip" data-placement="auto" title="">Thực tập thiết kế và phát triển ứng dụng Web</a></b>
+
+                                                <p>DHMT17A1HN - 010100169004</p>
+
+
+
+
+                                                    <p><span lang="lichtheotuan-tiet">Tiết</span>: 1 - 6<br></p>
+
+                                                    <p><span lang="giang-duong">Phòng</span>:<font> Phòng máy tính 04/N.A2-1110</font> </p>
+
+
+
+
+
+                                                        <p><span lang="lichtheotuan-gv">GV</span>: <font>Phạm Thị Hồng Nhung </font></p>
+
+                                                                                        
+
+
+
+
+                                                                                    </div>
+                            </td>
+                            <td></td>
+                            <td>
+                                        <div class="content color-lichhoc text-start" data-bg="914195" style="background-color:#71cb35;border-color:#c9d0db;text-align:left">
+
+                                                <b><a href="javascript:" target="" style="text-decoration:none;color: #003763;" data-bs-toggle="tooltip" data-placement="auto" title="">Đồ án 2</a></b>
+
+                                                <p>DHMT17A1HN - 010100185401</p>
+
+
+
+
+                                                    <p><span lang="lichtheotuan-tiet">Tiết</span>: 1 - 4<br></p>
+
+                                                    <p><span lang="giang-duong">Phòng</span>:<font> Phòng Lab Draytek/N.A2-1101</font> </p>
+
+
+
+
+
+                                                        <p><span lang="lichtheotuan-gv">GV</span>: <font>Nguyễn Quang  Chánh </font></p>
+
+                                                                                        
+
+
+
+
+                                                                                    </div>
+                            </td>
+                            <td>
+                                        <div class="content color-lichhoc text-start" data-bg="914021" style="text-align:left">
+
+                                                <b><a href="javascript:" target="" style="text-decoration:none;color: #003763;" data-bs-toggle="tooltip" data-placement="auto" title="">Chủ nghĩa xã hội khoa học</a></b>
+
+                                                <p>DHMT17A1HN - 010100153755</p>
+
+
+
+
+                                                    <p><span lang="lichtheotuan-tiet">Tiết</span>: 1 - 3<br></p>
+
+                                                    <p><span lang="giang-duong">Phòng</span>:<font> Phòng học/N.A2-409</font> </p>
+
+
+
+
+
+                                                        <p><span lang="lichtheotuan-gv">GV</span>: <font>Đoàn Thị  Hiền </font></p>
+
+                                                                                        
+
+
+
+
+                                                                                    </div>
+                                        <div class="content color-lichhoc text-start" data-bg="914055" style="text-align:left">
+
+                                                <b><a href="javascript:" target="" style="text-decoration:none;color: #003763;" data-bs-toggle="tooltip" data-placement="auto" title="">Điện toán đám mây</a></b>
+
+                                                <p>DHMT17A1HN - 010100277707</p>
+
+
+
+
+                                                    <p><span lang="lichtheotuan-tiet">Tiết</span>: 4 - 6<br></p>
+
+                                                    <p><span lang="giang-duong">Phòng</span>:<font> Phòng học/N.A2-409</font> </p>
+
+
+
+
+
+                                                        <p><span lang="lichtheotuan-gv">GV</span>: <font>Vũ Văn  Đốc </font></p>
+
+                                                                                        
+
+
+
+
+                                                                                    </div>
+                            </td>
+                            <td>
+                                        <div class="content color-lichhoc text-start" data-bg="914161" style="background-color:#71cb35;border-color:#c9d0db;text-align:left">
+
+                                                <b><a href="javascript:" target="" style="text-decoration:none;color: #003763;" data-bs-toggle="tooltip" data-placement="auto" title="">Thực tập thiết kế và phát triển ứng dụng Web</a></b>
+
+                                                <p>DHMT17A1HN - 010100169004</p>
+
+
+
+
+                                                    <p><span lang="lichtheotuan-tiet">Tiết</span>: 1 - 3<br></p>
+
+                                                    <p><span lang="giang-duong">Phòng</span>:<font> Phòng máy tính 04/N.A2-1110</font> </p>
+
+
+
+
+
+                                                        <p><span lang="lichtheotuan-gv">GV</span>: <font>Phạm Thị Hồng Nhung </font></p>
+
+                                                                                        
+
+
+
+
+                                                                                    </div>
+                            </td>
+                            <td>
+                                        <div class="content color-lichhoc text-start" data-bg="914043" style="text-align:left">
+
+                                                <b><a href="javascript:" target="" style="text-decoration:none;color: #003763;" data-bs-toggle="tooltip" data-placement="auto" title="">An toàn và an ninh mạng</a></b>
+
+                                                <p>DHMT17A1HN - 010100169701</p>
+
+
+
+
+                                                    <p><span lang="lichtheotuan-tiet">Tiết</span>: 1 - 4<br></p>
+
+                                                    <p><span lang="giang-duong">Phòng</span>:<font> Phòng học/N.A2-409</font> </p>
+
+
+
+
+
+                                                        <p><span lang="lichtheotuan-gv">GV</span>: <font>Phạm Minh  Thái </font></p>
+
+                                                                                        
+
+
+
+
+                                                                                    </div>
+                            </td>
+                            <td></td>
+                </tr>
+                <tr role="row">
+                    <td lang="lichtheotuan-buoichieu"><b>Chiều</b></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                </tr>
+                <tr role="row">
+                    <td lang="lichtheotuan-buoitoi"><b>Tối</b></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>

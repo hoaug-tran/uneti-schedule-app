@@ -5,6 +5,7 @@ import { themeManager } from "../app/utils/theme.js";
 let appVersionValue = null;
 let currentWeek = startOfWeek(new Date());
 let preFetchedWeek = null;
+let justLoggedIn = false;
 
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -86,40 +87,102 @@ function setStatus(msg) {
 
 
 
-function createToast(html, { id, duration = 3000, clickable = false, type = "info" } = {}) {
-  if (id !== "refresh-reminder-toast") {
-    hideToast("refresh-reminder-toast");
-  }
 
-  const existingToast = id ? document.getElementById(id) : null;
-  if (existingToast) {
-    existingToast.remove();
-  }
+const _toastQueue = [];
+let _toastActive = false;
+let _toastCurrentEl = null;
+let _toastGapTimer = null;
+
+function _processQueue() {
+  if (_toastActive || _toastQueue.length === 0) return;
+
+  const item = _toastQueue.shift();
+  _toastActive = true;
+
+  const existing = item.id ? document.getElementById(item.id) : null;
+  if (existing) existing.remove();
 
   const toast = document.createElement("div");
-  toast.className = "toast";
-  if (id) toast.id = id;
-  document.body.appendChild(toast);
+  toast.className = `toast toast-${item.type}`;
+  if (item.id) toast.id = item.id;
+  toast.innerHTML = item.html;
 
-  toast.classList.remove("toast-success", "toast-warning", "toast-error", "toast-info");
-  toast.classList.add(`toast-${type}`);
-
-  toast.innerHTML = html;
-  requestAnimationFrame(() => toast.classList.add("show"));
-  if (duration > 0) {
-    setTimeout(() => {
-      toast.classList.remove("show");
-      setTimeout(() => toast.remove(), 250);
-    }, duration);
+  if (item.clickable) {
+    toast.style.cursor = "pointer";
+    if (item.onClick) toast.onclick = item.onClick;
   }
-  return toast;
+
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("show"));
+  _toastCurrentEl = toast;
+
+  const dismiss = () => {
+    if (!toast.parentNode) {
+      _toastActive = false;
+      _toastCurrentEl = null;
+      _scheduleNext();
+      return;
+    }
+    toast.classList.remove("show");
+    setTimeout(() => {
+      toast.remove();
+      _toastActive = false;
+      _toastCurrentEl = null;
+      _scheduleNext();
+    }, 250);
+  };
+
+  if (item.duration > 0) {
+    setTimeout(dismiss, item.duration);
+  }
+  toast._dismiss = dismiss;
+}
+
+function _scheduleNext() {
+  if (_toastQueue.length === 0) return;
+  clearTimeout(_toastGapTimer);
+  _toastGapTimer = setTimeout(_processQueue, 3000);
+}
+
+function createToast(html, { id, duration = 3000, clickable = false, type = "info", priority = false, onClick } = {}) {
+  if (id !== "refresh-reminder-toast") {
+    _dismissById("refresh-reminder-toast");
+  }
+
+  if (priority && _toastCurrentEl) {
+    _toastCurrentEl._dismiss?.();
+    clearTimeout(_toastGapTimer);
+  }
+
+  _toastQueue.push({ html, id, duration, clickable, type, onClick });
+
+  if (!_toastActive) {
+    _processQueue();
+  }
+
+  return null;
 }
 
 function hideToast(id) {
-  const toast = document.getElementById(id);
-  if (!toast) return;
-  toast.classList.remove("show");
-  setTimeout(() => toast.remove(), 250);
+  _dismissById(id);
+  const idx = _toastQueue.findIndex(t => t.id === id);
+  if (idx !== -1) _toastQueue.splice(idx, 1);
+}
+
+function _dismissById(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el._dismiss) {
+    el._dismiss();
+  } else {
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 250);
+    if (_toastCurrentEl === el) {
+      _toastActive = false;
+      _toastCurrentEl = null;
+      _scheduleNext();
+    }
+  }
 }
 
 function showToast(msg, id = "default-toast", type = "info") {
@@ -259,97 +322,112 @@ let updateState = {
   hasPendingUpdate: false
 };
 
+// Download toast cố định — bypass queue, không bao giờ ẩn trong lúc tải
+let _dlToast = null;
+
+function _getOrCreateDlToast() {
+  if (_dlToast && _dlToast.isConnected) return _dlToast;
+  const el = document.createElement('div');
+  el.id = 'update-toast';
+  el.className = 'toast toast-info';
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  _dlToast = el;
+  return el;
+}
+
+function _removeDlToast() {
+  if (_dlToast && _dlToast.isConnected) {
+    _dlToast.classList.remove('show');
+    const ref = _dlToast;
+    setTimeout(() => ref.remove(), 250);
+  }
+  _dlToast = null;
+}
+
 function showUpdateToast(state, data = {}) {
   const toastId = 'update-toast';
 
-  if (state === 'available' || state === 'checking') {
-    const existingToasts = document.querySelectorAll('.toast.show');
-    if (existingToasts.length > 0) {
-      console.log('[Update] Skipping toast, other toasts are visible');
-      if (state === 'available') {
-        updateState.hasPendingUpdate = true;
-        updateState.newVersion = data.newVersion;
-      }
+  if (state === 'available') updateState.hasPendingUpdate = false;
+
+  // Downloading: toast cố định, chỉ update nội dung
+  if (state === 'downloading') {
+    const pct   = Math.round(data.progress || 0);
+    const dlMB  = ((data.transferred || 0) / 1024 / 1024).toFixed(1);
+    const totMB = ((data.total || 0) / 1024 / 1024).toFixed(1);
+    const spd   = ((data.bytesPerSecond || 0) / 1024 / 1024).toFixed(2);
+    const el    = _getOrCreateDlToast();
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>⬇ ${i18n.t('updateDownloading')}</span>
+          <b>${pct}%</b>
+        </div>
+        <div style="background:rgba(255,255,255,.25);border-radius:4px;height:5px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:#fff;border-radius:4px;transition:width .4s ease"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;opacity:.85">
+          <span>${dlMB} / ${totMB} MB</span>
+          <span>${spd} MB/s</span>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Downloaded: chuyển toast sang success
+  if (state === 'downloaded') {
+    const msg = data?.countdown || i18n.t('updateDownloaded');
+    if (_dlToast && _dlToast.isConnected) {
+      _dlToast.className = 'toast toast-success show';
+      _dlToast.innerHTML = `<b>✅ ${msg}</b>`;
       return;
     }
+    createToast(`<b>✅ ${msg}</b>`, { id: toastId, duration: 0, type: 'success', priority: true });
+    return;
   }
 
-  if (state === 'available') {
-    updateState.hasPendingUpdate = false;
+  // Error: xóa download toast, show error qua queue
+  if (state === 'error') {
+    _removeDlToast();
+    hideToast(toastId);
+    createToast(i18n.t('updateError'), { id: toastId, duration: 4000, type: 'error', priority: true });
+    return;
   }
 
-  let message = '';
-  let type = 'info';
-  let duration = 3000;
-  let clickable = false;
-
+  // Checking: update in-place nếu đang hiện, không tạo mới vào queue
   if (state === 'checking') {
-    message = i18n.t('updateChecking');
-    type = 'info';
-    duration = 0;
-  } else if (state === 'available') {
-    message = i18n.t('updateAvailableMessage').replace('{version}', data.newVersion || updateState.newVersion);
-    type = 'success';
-    duration = 8000;
-    clickable = true;
-  } else if (state === 'downloading') {
-    const percent = Math.round(data.progress || 0);
-    const downloadedMB = ((data.transferred || 0) / 1024 / 1024).toFixed(1);
-    const totalMB = ((data.total || 0) / 1024 / 1024).toFixed(1);
-    const speedMBps = ((data.bytesPerSecond || 0) / 1024 / 1024).toFixed(1);
-
-    message = `${i18n.t('updateDownloading')}: ${percent}%`;
-    if (data.total) {
-      message += ` (${downloadedMB}/${totalMB} MB)`;
-    }
-    if (data.bytesPerSecond) {
-      message += ` - ${speedMBps} MB/s`;
-    }
-
-    type = 'info';
-    duration = 0;
-  } else if (state === 'downloaded') {
-    message = data?.countdown || i18n.t('updateDownloaded');
-    type = 'success';
-    duration = 0;
-  } else if (state === 'not-available') {
-    message = `${i18n.t('updateNotAvailable')} (v${data.version || updateState.currentVersion})`;
-    type = 'info';
-    duration = 3000;
-  } else if (state === 'error') {
-    message = i18n.t('updateError');
-    type = 'error';
-    duration = 4000;
+    const existing = document.getElementById(toastId);
+    if (existing) { existing.innerHTML = i18n.t('updateChecking'); return; }
+    createToast(i18n.t('updateChecking'), { id: toastId, duration: 0, type: 'info', priority: true });
+    return;
   }
 
-  const toast = createToast(message, {
-    id: toastId,
-    duration,
-    type,
-    clickable
-  });
-
-  if (clickable && toast) {
-    toast.style.cursor = 'pointer';
-    toast.onclick = async () => {
-      hideToast(toastId);
-      showUpdateToast('downloading', { progress: 0 });
-      try {
-        await window.updateAPI?.install?.();
-      } catch (e) {
-        showUpdateToast('error');
+  // Available / not-available: đi qua queue bình thường
+  if (state === 'available') {
+    const msg = i18n.t('updateAvailableMessage').replace('{version}', data.newVersion || updateState.newVersion);
+    createToast(msg, {
+      id: toastId, duration: 8000, type: 'success', clickable: true,
+      onClick: async () => {
+        hideToast(toastId);
+        showUpdateToast('downloading', { progress: 0 });
+        try { await window.updateAPI?.install?.(); }
+        catch (e) { showUpdateToast('error'); }
       }
-    };
+    });
+    return;
+  }
+
+  if (state === 'not-available') {
+    const msg = `${i18n.t('updateNotAvailable')} (v${data.version || updateState.currentVersion})`;
+    createToast(msg, { id: toastId, duration: 3000, type: 'info' });
   }
 }
+
 
 window.addEventListener('focus', () => {
   if (updateState.hasPendingUpdate) {
     setTimeout(() => {
-      const existingToasts = document.querySelectorAll('.toast.show');
-      if (existingToasts.length === 0) {
-        showUpdateToast('available', { newVersion: updateState.newVersion });
-      }
+      showUpdateToast('available', { newVersion: updateState.newVersion });
     }, 1000);
   }
 });
@@ -397,8 +475,10 @@ function registerIpcListeners() {
   if (window.widgetAPI?.onLogin) {
     window.widgetAPI.onLogin(async () => {
       window.loggerAPI?.debug("onLogin event received, re-rendering schedule");
+      justLoggedIn = true;
+      setTimeout(() => { justLoggedIn = false; }, 10000);
+      showToast(i18n.t("loginSuccess"), "login-success-toast", "success");
       loadSchedule(0);
-      showToast(i18n.t("loginSuccess"));
     });
   }
   if (window.widgetAPI?.onLoginRequired) {
@@ -493,11 +573,16 @@ async function render(isoDate) {
 
     if (payload && payload.weekStart) {
       state = "ok";
+      justLoggedIn = false;
       currentWeek = new Date(payload.weekStart);
       window.loggerAPI?.debug(`[render] Updated currentWeek to: ${currentWeek.toISOString()}`);
     } else if (hasCookies) {
-      state = "expired";
-      loginLabel = i18n.t("loginAgain");
+      if (justLoggedIn) {
+        state = "loading";
+      } else {
+        state = "expired";
+        loginLabel = i18n.t("loginAgain");
+      }
     }
 
     if (!payload && !hasCookies)
@@ -528,10 +613,15 @@ async function render(isoDate) {
     let bodyHtml = "";
 
     if (!payload) {
-      metaHtml = i18n.t("noData");
-      bodyHtml = `<div class="empty">${i18n
-        .t("noDataDesc")
-        .replace("đăng nhập", `<b>${loginLabel}</b>`)}</div>`;
+      if (state === "loading") {
+        metaHtml = i18n.t("noData");
+        bodyHtml = createSkeletonHTML();
+      } else {
+        metaHtml = i18n.t("noData");
+        bodyHtml = `<div class="empty">${i18n
+          .t("noDataDesc")
+          .replace("đăng nhập", `<b>${loginLabel}</b>`)}</div>`;
+      }
     } else {
       const { updatedAt, data, weekStart } = payload;
       const grouped = byDay(data);
