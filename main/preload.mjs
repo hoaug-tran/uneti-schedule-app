@@ -1,6 +1,4 @@
 import { contextBridge, ipcRenderer } from "electron";
-import fs from "fs";
-import path from "path";
 import { weekKey } from "../app/utils/date.js";
 
 console.log("[preload] injected successfully (ESM):", import.meta.url);
@@ -9,89 +7,13 @@ async function getUserDataPath() {
   return ipcRenderer.invoke("get-userData-path");
 }
 
-async function getStoreDir() {
-  const userDataPath = await getUserDataPath();
-  return path.join(userDataPath, "store");
-}
-
-async function getScheduleFile(isoDate) {
-  const storeDir = await getStoreDir();
-  const d = isoDate ? new Date(isoDate) : new Date();
-  const key = weekKey(d);
-  return path.join(storeDir, `schedule-${key}.json`);
-}
-
-function scheduleNeedsUpdate(file, maxAgeMs = 6 * 60 * 60 * 1000) {
-  if (!fs.existsSync(file)) return true;
-  try {
-    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (!raw?.updatedAt) return true;
-    return Date.now() - raw.updatedAt > maxAgeMs;
-  } catch {
-    return true;
-  }
-}
-
-async function getCookiesFile() {
-  const storeDir = await getStoreDir();
-  return path.join(storeDir, "cookies.txt");
-}
-
 contextBridge.exposeInMainWorld("scheduleAPI", {
   load: async (isoDate) => {
-    try {
-      const storeDir = await getStoreDir();
-      const schedulesFile = path.join(storeDir, "schedules.json");
-
-      if (!fs.existsSync(schedulesFile)) {
-        ipcRenderer.send("logger:log", "debug", "[scheduleAPI.load] schedules.json not found");
-        return null;
-      }
-
-      const raw = fs.readFileSync(schedulesFile, "utf8");
-
-      let schedules;
-      try {
-        schedules = JSON.parse(raw);
-      } catch (parseErr) {
-        ipcRenderer.send("logger:log", "error", `[scheduleAPI.load] Corrupt schedules.json, deleting: ${parseErr.message}`);
-        fs.unlinkSync(schedulesFile);
-        return null;
-      }
-
-      const d = isoDate ? new Date(isoDate) : new Date();
-      const key = weekKey(d);
-
-      const schedule = schedules[key];
-      if (!schedule) {
-        ipcRenderer.send("logger:log", "warn", `[scheduleAPI.load] no schedule for key: ${key}`);
-        return null;
-      }
-
-      const payload = {
-        weekStart: schedule.week_start,
-        data: schedule.data || [],
-        updatedAt: schedule.updated_at
-      };
-
-      ipcRenderer.send("logger:log", "debug", `[scheduleAPI.load] loaded key: ${key}, data.length: ${payload.data.length}`);
-      return payload;
-    } catch (err) {
-      ipcRenderer.send("logger:log", "error", `[scheduleAPI.load] error: ${err}`);
-      return null;
-    }
+    return ipcRenderer.invoke("schedule:load-file", isoDate);
   },
   cookiesExists: async () => {
-    try {
-      const storeDir = await getStoreDir();
-      const txt = path.join(storeDir, "cookies.txt");
-      const json = path.join(storeDir, "cookies.json");
-      return fs.existsSync(txt) || fs.existsSync(json);
-    } catch {
-      return false;
-    }
+    return ipcRenderer.invoke("schedule:cookies-exists");
   },
-  needsUpdate: scheduleNeedsUpdate,
   onReload: (cb) => ipcRenderer.on("reload", () => cb?.()),
 });
 
@@ -137,16 +59,15 @@ contextBridge.exposeInMainWorld("appAPI", {
 
 contextBridge.exposeInMainWorld("scheduleAPI_ex", {
   cookiesExists: async () => {
-    try {
-      const storeDir = await getStoreDir();
-      return (
-        fs.existsSync(path.join(storeDir, "cookies.json")) ||
-        fs.existsSync(path.join(storeDir, "cookies.txt"))
-      );
-    } catch {
-      return false;
-    }
+    return ipcRenderer.invoke("schedule:cookies-exists");
   },
+});
+
+contextBridge.exposeInMainWorld("loggerAPI", {
+  debug: (msg, context) => ipcRenderer.send("logger:log", "debug", msg, context),
+  info: (msg, context) => ipcRenderer.send("logger:log", "info", msg, context),
+  warn: (msg, context) => ipcRenderer.send("logger:log", "warn", msg, context),
+  error: (msg, context) => ipcRenderer.send("logger:log", "error", msg, context),
 });
 
 contextBridge.exposeInMainWorld("networkAPI", {

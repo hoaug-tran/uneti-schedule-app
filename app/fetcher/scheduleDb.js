@@ -56,26 +56,6 @@ export async function saveSchedule(weekKey, weekStart, data, offsets) {
   await saveSchedulesToDisk(schedules);
 }
 
-export function loadSchedule(weekKey) {
-  try {
-    const storeDir = getStoreDir();
-    const filePath = path.join(storeDir, SCHEDULES_FILE);
-    const raw = require("fs").readFileSync(filePath, "utf8");
-
-    let schedules;
-    try {
-      schedules = JSON.parse(raw);
-    } catch (parseErr) {
-      console.error(`[scheduleDb] Corrupt schedules.json for key ${weekKey}, deleting: ${parseErr.message}`);
-      require("fs").unlinkSync(filePath);
-      return null;
-    }
-
-    return schedules[weekKey] || null;
-  } catch {
-    return null;
-  }
-}
 
 export async function loadScheduleAsync(weekKey) {
   const schedules = await loadSchedulesFromDisk();

@@ -34,7 +34,8 @@ import {
   startCookieRefreshService,
   stopCookieRefreshService,
 } from "../app/fetcher/cookieRefresh.js";
-import { closeDatabase, loadSchedule } from "../app/fetcher/scheduleDb.js";
+import { closeDatabase, loadScheduleAsync } from "../app/fetcher/scheduleDb.js";
+import { weekKey } from "../app/utils/date.js";
 import { i18nInstance as i18n } from "../app/utils/i18n.js";
 
 import { logger } from "../app/utils/logger.js";
@@ -78,11 +79,33 @@ ipcMain.handle("schedule:cookies-exists", async () => {
   return await hasCookies();
 });
 
-ipcMain.on("logger:log", (_, level, message) => {
+ipcMain.handle("schedule:load-file", async (_, isoDate) => {
+  try {
+    const d = isoDate ? new Date(isoDate) : new Date();
+    const key = weekKey(d);
+    
+    const schedule = await loadScheduleAsync(key);
+    if (!schedule) {
+      logger.warn(`[schedule:load-file] no schedule for key: ${key}`);
+      return null;
+    }
+
+    return {
+      weekStart: schedule.week_start,
+      data: schedule.data || [],
+      updatedAt: schedule.updated_at
+    };
+  } catch (err) {
+    logger.error(`[schedule:load-file] error: ${err}`);
+    return null;
+  }
+});
+
+ipcMain.on("logger:log", (_, level, message, context) => {
   if (logger[level]) {
-    logger[level](`[renderer] ${message}`);
+    logger[level](`[renderer] ${message}`, context);
   } else {
-    logger.info(`[renderer] ${message}`);
+    logger.info(`[renderer] ${message}`, context);
   }
 });
 
@@ -312,7 +335,11 @@ ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
     return data;
   } catch (err) {
     logger.warn(`fetch-week error: ${err?.message}`);
-    return null;
+    const msg = err?.message || String(err);
+    if (msg.includes("Cookie expired") || msg.includes("No cookies") || msg.includes("stale session")) {
+      win?.webContents.send("login-required");
+    }
+    throw err;
   }
 });
 
@@ -415,7 +442,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.mjs"),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -649,19 +676,16 @@ app.whenReady().then(async () => {
         const i18nKey = result0?.staleMessage || result1?.staleMessage || "staleDataWarning";
         logger.warn(`[main] Stale data detected - forcing logout: ${i18nKey}`);
 
-        // Force logout: clear cookies and show login UI
         const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
         await clearAllCookies();
         stopCookieRefreshService();
 
-        // Send login-required to show login UI
         win?.webContents.send("login-required");
         win?.webContents.send("reload");
 
-        // Send toast warning with 8 second duration
         win?.webContents.send("toast-stale-logout", i18nKey);
 
-        return; // Don't continue with stale data
+        return;
       }
 
       logger.info("[main] fetched schedule in background");
@@ -673,9 +697,8 @@ app.whenReady().then(async () => {
         logger.warn("[main] Session expired, requiring re-login");
         win?.webContents.send("status", "Session expired, please login again.");
         win?.webContents.send("login-required");
-        win?.webContents.send("reload"); // Trigger render to show login UI
+        win?.webContents.send("reload");
       } else {
-        // Other errors - still try to show cached data
         win?.webContents.send("reload");
       }
     }

@@ -21,25 +21,46 @@ export async function showLoginWindow(parent) {
     });
 
     win.loadURL(CONFIG.UNETI_LOGIN_URL);
+    logger.debug(`[loginWindow] loading URL: ${CONFIG.UNETI_LOGIN_URL}`);
 
     win.webContents.on("did-navigate", async (_, url) => {
-      if (url.includes("dashboard")) {
-        const cookies = await win.webContents.session.cookies.get({
-          url: `https://${CONFIG.UNETI_DOMAIN}`,
-        });
-        const cookieHeader = cookies
-          .map((c) => `${c.name}=${c.value}`)
-          .join("; ");
+      logger.debug(`[loginWindow] navigated to: ${url}`);
+      if (
+        url.includes("cloudflare") ||
+        url.includes("cf-browser-verification")
+      ) {
+        logger.warn(`[loginWindow] Cloudflare challenge detected on: ${url}`);
+      }
 
-        await saveCookiesToSecureStorage(cookies);
-        await saveCookieHeaderToTxt(cookieHeader);
+      if (
+        url.includes("dashboard") ||
+        (url.includes("sinh-vien-dang-nhap.html") === false &&
+          url !== CONFIG.UNETI_LOGIN_URL)
+      ) {
+        if (url.includes("dashboard") || url.includes("lich-theo-tuan")) {
+          logger.info(
+            `[loginWindow] Successfully logged in, capturing cookies from ${url}`,
+          );
+          const cookies = await win.webContents.session.cookies.get({
+            url: `https://${CONFIG.UNETI_DOMAIN}`,
+          });
+          const cookieHeader = cookies
+            .map((c) => `${c.name}=${c.value}`)
+            .join("; ");
 
-        logger.info(`[loginWindow] Saved ${cookies.length} cookies.`);
-        win.close();
-        resolve(cookieHeader);
+          await saveCookiesToSecureStorage(cookies);
+          await saveCookieHeaderToTxt(cookieHeader);
+
+          logger.info(`[loginWindow] Saved ${cookies.length} cookies.`);
+          win.close();
+          resolve(cookieHeader);
+        }
       }
     });
 
-    win.on("closed", () => reject(new Error("Login cancelled")));
+    win.on("closed", () => {
+      logger.warn("[loginWindow] Window closed");
+      reject(new Error("Login cancelled"));
+    });
   });
 }

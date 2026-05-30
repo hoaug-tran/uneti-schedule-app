@@ -5,7 +5,7 @@ import { getCookiePartition } from "./cookieManager.js";
 import { postViaWindow } from "./fetchViaWindow.js";
 import {
   saveSchedule,
-  loadSchedule,
+  loadScheduleAsync,
   deleteAllSchedules,
 } from "./scheduleDb.js";
 import { CONFIG } from "../config.js";
@@ -33,7 +33,6 @@ function withTimeout(promise, ms = CONFIG.HTTP_TIMEOUT_MS, label = "request") {
 }
 
 async function postWeek(_unused, body, label) {
-  // Dùng fetchViaWindow — chạy fetch trong Chromium renderer thật để bypass Cloudflare
   return withTimeout(
     postViaWindow(body, label),
     CONFIG.HTTP_TIMEOUT_MS,
@@ -229,7 +228,7 @@ export async function clearAllSchedules() {
 async function loadOffsetsFromDb(baseDate = new Date()) {
   try {
     const key = weekKey(baseDate);
-    const data = loadSchedule(key);
+    const data = await loadScheduleAsync(key);
     return data?.offsets || null;
   } catch (err) {
     logger.warn("[loadOffsetsFromDb] fail:", err?.message);

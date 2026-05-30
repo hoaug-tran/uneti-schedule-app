@@ -1,12 +1,8 @@
 /**
- * fetchViaWindow.js
  *
- * Bypass Cloudflare Bot Protection bằng cách chạy fetch() từ BÊN TRONG
+ * Bypass Cloudflare Bot Protection bằng cách chạy fetch() từ trong
  * một BrowserWindow ẩn dùng cùng partition với login window.
- *
- * Lý do: session.fetch() từ main process vẫn bị Cloudflare block dù có
- * cf_clearance cookie. Nhưng fetch() chạy trong Chromium renderer context
- * với đúng TLS fingerprint + cf_clearance thì qua được.
+ * Hay lắm web UNETI
  */
 
 import { BrowserWindow } from "electron";
@@ -17,18 +13,23 @@ import { logger } from "../utils/logger.js";
 let _win = null;
 let _winReady = false;
 let _winLoading = false;
+let _idleTimeout = null;
 
-/**
- * Lấy hoặc tạo hidden BrowserWindow với partition chứa cf_clearance.
- * Chỉ tạo 1 lần, tái sử dụng cho mọi request.
- */
+function resetIdleTimeout() {
+  if (_idleTimeout) clearTimeout(_idleTimeout);
+  _idleTimeout = setTimeout(() => {
+    logger.debug("[fetchViaWindow] destroying hidden window due to idle timeout");
+    destroyFetchWindow();
+  }, 30000);
+}
+
 async function getOrCreateWindow() {
   if (_win && !_win.isDestroyed() && _winReady) {
+    resetIdleTimeout();
     return _win;
   }
 
   if (_winLoading) {
-    // Chờ window đang load xong
     await new Promise((resolve) => {
       const check = setInterval(() => {
         if (_winReady || (_win && _win.isDestroyed())) {
@@ -37,7 +38,10 @@ async function getOrCreateWindow() {
         }
       }, 100);
     });
-    if (_win && !_win.isDestroyed() && _winReady) return _win;
+    if (_win && !_win.isDestroyed() && _winReady) {
+      resetIdleTimeout();
+      return _win;
+    }
   }
 
   _winReady = false;
@@ -51,8 +55,8 @@ async function getOrCreateWindow() {
         height: 10,
         skipTaskbar: true,
         webPreferences: {
-          partition: getCookiePartition(), // Dùng chung partition với login window
-          contextIsolation: false,         // Cần false để executeJavaScript hoạt động
+          partition: getCookiePartition(),
+          contextIsolation: false,
           javascript: true,
           backgroundThrottling: false,
         },
@@ -67,7 +71,6 @@ async function getOrCreateWindow() {
 
       _win.webContents.on("did-fail-load", (_, code, desc) => {
         logger.warn(`[fetchViaWindow] page load failed: ${code} ${desc}`);
-        // Vẫn coi là ready — CF challenge có thể xuất hiện sau
         _winReady = true;
         _winLoading = false;
         resolve(_win);
@@ -77,11 +80,10 @@ async function getOrCreateWindow() {
         logger.debug("[fetchViaWindow] hidden window page loaded");
         _winReady = true;
         _winLoading = false;
+        resetIdleTimeout();
         resolve(_win);
       });
 
-      // Load trang lịch của UNETI để thiết lập same-origin context
-      // Điều này cũng cho phép Chromium tự giải Cloudflare challenge nếu cần
       _win.loadURL("https://sinhvien.uneti.edu.vn/lich-theo-tuan.html");
       logger.debug("[fetchViaWindow] created hidden window, loading UNETI page...");
     } catch (err) {
@@ -91,17 +93,12 @@ async function getOrCreateWindow() {
   });
 }
 
-/**
- * Thực hiện POST request TỪ BÊN TRONG Chromium renderer window.
- * fetch() chạy trong context này có đầy đủ TLS fingerprint + cookies (kể cả cf_clearance).
- */
 export async function postViaWindow(body, label) {
   const win = await getOrCreateWindow();
 
   const endpoint = CONFIG.UNETI_SCHEDULE_ENDPOINT;
   const referer = "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html";
 
-  // Script chạy trong Chromium renderer — same-origin với UNETI
   const script = `
     (async () => {
       try {
@@ -128,7 +125,6 @@ export async function postViaWindow(body, label) {
   try {
     result = await win.webContents.executeJavaScript(script, true);
   } catch (err) {
-    // Nếu window bị destroy hoặc lỗi khác, tạo lại
     logger.warn(`[fetchViaWindow] executeJavaScript failed (${label}): ${err?.message}`);
     _win = null;
     _winReady = false;
@@ -149,13 +145,14 @@ export async function postViaWindow(body, label) {
   return result.text;
 }
 
-/**
- * Destroy hidden window (gọi khi logout hoặc app quit)
- */
 export function destroyFetchWindow() {
   if (_win && !_win.isDestroyed()) {
     _win.destroy();
     _win = null;
     _winReady = false;
+  }
+  if (_idleTimeout) {
+    clearTimeout(_idleTimeout);
+    _idleTimeout = null;
   }
 }

@@ -141,7 +141,7 @@ function _processQueue() {
 function _scheduleNext() {
   if (_toastQueue.length === 0) return;
   clearTimeout(_toastGapTimer);
-  _toastGapTimer = setTimeout(_processQueue, 3000);
+  _toastGapTimer = setTimeout(_processQueue, 100);
 }
 
 function createToast(html, { id, duration = 3000, clickable = false, type = "info", priority = false, onClick } = {}) {
@@ -281,6 +281,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   registerIpcListeners();
 
+  window.loggerAPI?.info("[DOMContentLoaded] Initialization started");
   window.loggerAPI?.debug("[DOMContentLoaded] Calling render...");
   try {
     await render(window.dateAPI.weekKey(currentWeek));
@@ -322,7 +323,6 @@ let updateState = {
   hasPendingUpdate: false
 };
 
-// Download toast cố định — bypass queue, không bao giờ ẩn trong lúc tải
 let _dlToast = null;
 
 function _getOrCreateDlToast() {
@@ -350,7 +350,6 @@ function showUpdateToast(state, data = {}) {
 
   if (state === 'available') updateState.hasPendingUpdate = false;
 
-  // Downloading: toast cố định, chỉ update nội dung
   if (state === 'downloading') {
     const pct   = Math.round(data.progress || 0);
     const dlMB  = ((data.transferred || 0) / 1024 / 1024).toFixed(1);
@@ -374,19 +373,17 @@ function showUpdateToast(state, data = {}) {
     return;
   }
 
-  // Downloaded: chuyển toast sang success
   if (state === 'downloaded') {
     const msg = data?.countdown || i18n.t('updateDownloaded');
     if (_dlToast && _dlToast.isConnected) {
       _dlToast.className = 'toast toast-success show';
-      _dlToast.innerHTML = `<b>✅ ${msg}</b>`;
+      _dlToast.innerHTML = `<b>${msg}</b>`;
       return;
     }
-    createToast(`<b>✅ ${msg}</b>`, { id: toastId, duration: 0, type: 'success', priority: true });
+    createToast(`<b>${msg}</b>`, { id: toastId, duration: 0, type: 'success', priority: true });
     return;
   }
 
-  // Error: xóa download toast, show error qua queue
   if (state === 'error') {
     _removeDlToast();
     hideToast(toastId);
@@ -394,7 +391,6 @@ function showUpdateToast(state, data = {}) {
     return;
   }
 
-  // Checking: update in-place nếu đang hiện, không tạo mới vào queue
   if (state === 'checking') {
     const existing = document.getElementById(toastId);
     if (existing) { existing.innerHTML = i18n.t('updateChecking'); return; }
@@ -402,7 +398,6 @@ function showUpdateToast(state, data = {}) {
     return;
   }
 
-  // Available / not-available: đi qua queue bình thường
   if (state === 'available') {
     const msg = i18n.t('updateAvailableMessage').replace('{version}', data.newVersion || updateState.newVersion);
     createToast(msg, {
@@ -484,8 +479,9 @@ function registerIpcListeners() {
   if (window.widgetAPI?.onLoginRequired) {
     window.widgetAPI.onLoginRequired(() => {
       window.loggerAPI?.debug("onLoginRequired event received");
-      showToast(i18n.t("sessionExpired"), "login-required-toast");
+      showToast(i18n.t("sessionExpired"), "login-required-toast", "error");
       render(window.dateAPI.weekKey(currentWeek));
+      window.widgetAPI.login();
     });
   }
 
@@ -587,7 +583,9 @@ async function render(isoDate) {
 
     if (!payload && !hasCookies)
       window.loggerAPI?.debug("no data, waiting for login");
-    else if (payload) window.loggerAPI?.debug(`schedule loaded successfully, ${payload.data?.length ?? 0} classes`);
+    else if (payload) {
+      window.loggerAPI?.debug(`schedule loaded successfully, ${payload.data?.length ?? 0} classes`);
+    }
 
     const currentWeekKey = window.dateAPI.weekKey(new Date());
     const thisWeekKey = window.dateAPI.weekKey(isoDate);
@@ -947,7 +945,11 @@ async function changeWeek(offset) {
         window.loggerAPI?.info(`[changeWeek] Cache HIT, showing cached data`);
         currentWeek = new Date(cachedData.weekStart);
         await render(window.dateAPI.weekKey(currentWeek));
-        showToast(i18n.t("offlineMode"), toastId, "warning");
+        if (!isOnline) {
+          showToast(i18n.t("offlineMode"), toastId, "warning");
+        } else {
+          showToast(i18n.t("loadFailed"), toastId, "error");
+        }
       } else {
         window.loggerAPI?.warn(`[changeWeek] Cache MISS, no data available`);
         showToast(i18n.t("noDataForWeek"), toastId, "error");
@@ -963,10 +965,11 @@ async function changeWeek(offset) {
   } catch (err) {
     window.loggerAPI?.error(`[changeWeek] ERROR: ${err?.message}`, err);
 
-    if (err?.message?.includes("Cookie expired") || err?.message?.includes("Session")) {
+    if (err?.message?.includes("Cookie expired") || err?.message?.includes("Session") || err?.message?.includes("No cookies")) {
       window.loggerAPI?.warn(`[changeWeek] Session expired, triggering login`);
       showToast(i18n.t("sessionExpired"), toastId, "error");
-      throw err;
+      window.widgetAPI.login();
+      return;
     }
 
     window.loggerAPI?.debug(`[changeWeek] Network error, attempting cache fallback`);
@@ -981,7 +984,11 @@ async function changeWeek(offset) {
         window.loggerAPI?.info(`[changeWeek] Cache fallback SUCCESS`);
         currentWeek = new Date(cachedData.weekStart);
         await render(window.dateAPI.weekKey(currentWeek));
-        showToast(i18n.t("offlineMode"), toastId, "warning");
+        if (!isOnline) {
+          showToast(i18n.t("offlineMode"), toastId, "warning");
+        } else {
+          showToast(i18n.t("loadFailed"), toastId, "error");
+        }
       } else {
         window.loggerAPI?.warn(`[changeWeek] Cache fallback FAILED`);
         showToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), toastId, "error");
