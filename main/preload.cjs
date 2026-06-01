@@ -1,7 +1,25 @@
-import { contextBridge, ipcRenderer } from "electron";
-import { weekKey } from "../app/utils/date.js";
+const { contextBridge, ipcRenderer } = require("electron");
 
-console.log("[preload] injected successfully (ESM):", import.meta.url);
+function startOfWeek(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay() || 7;
+  if (day !== 1) d.setDate(d.getDate() - (day - 1));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function formatYMDLocal(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function weekKey(date = new Date()) {
+  return formatYMDLocal(startOfWeek(date));
+}
+
+console.log("[preload] injected successfully");
 
 async function getUserDataPath() {
   return ipcRenderer.invoke("get-userData-path");

@@ -186,7 +186,7 @@ function _dismissById(id) {
 }
 
 function showToast(msg, id = "default-toast", type = "info") {
-  createToast(msg, { id, type });
+  createToast(msg, { id, type, priority: true });
 }
 
 function byDay(data) {
@@ -295,7 +295,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const hasCookies = await window.scheduleAPI?.cookiesExists?.();
     if (hasCookies) {
       setTimeout(() => {
-        createToast(i18n.t("offlineWarning"), { id: offlineToastId, duration: 0, clickable: true, type: "warning" });
+        createToast(i18n.t("offlineWarning"), { id: offlineToastId, duration: 0, clickable: true, type: "warning", priority: true });
       }, 1000);
     }
   }
@@ -304,7 +304,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     window.loggerAPI?.info("[networkMonitor] online");
     isOnline = true;
     hideToast(offlineToastId);
-    createToast(i18n.t("onlineRestored"), { id: "online-restored", duration: 3000, type: "success" });
+    createToast(i18n.t("onlineRestored"), { id: "online-restored", duration: 3000, type: "success", priority: true });
   });
 
   window.addEventListener("offline", async () => {
@@ -312,7 +312,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     isOnline = false;
     const hasCookies = await window.scheduleAPI?.cookiesExists?.();
     if (hasCookies) {
-      createToast(i18n.t("offlineWarning"), { id: offlineToastId, duration: 0, clickable: true, type: "warning" });
+      createToast(i18n.t("offlineWarning"), { id: offlineToastId, duration: 0, clickable: true, type: "warning", priority: true });
     }
   });
 });
@@ -819,14 +819,16 @@ async function render(isoDate) {
     if (btnLogin) btnLogin.onclick = () => window.widgetAPI.login();
     if (btnRefresh) btnRefresh.onclick = async () => {
       btnRefresh.disabled = true;
-      createToast(i18n.t("fetchingWeek"), { id: "refresh-loading", duration: 0, type: "info" });
+      hideToast("refresh-success");
+      hideToast("refresh-error");
+      createToast(i18n.t("fetchingWeek"), { id: "refresh-loading", duration: 0, type: "info", priority: true });
       try {
         await window.widgetAPI.refresh();
         hideToast("refresh-loading");
-        createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success" });
+        createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success", priority: true });
       } catch (e) {
         hideToast("refresh-loading");
-        createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error" });
+        createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error", priority: true });
       } finally {
         btnRefresh.disabled = false;
       }
@@ -920,15 +922,15 @@ async function changeWeek(offset) {
         window.loggerAPI?.info(`[changeWeek] Cache HIT, showing cached data`);
         currentWeek = new Date(cachedData.weekStart);
         await render(window.dateAPI.weekKey(currentWeek));
-        showToast(i18n.t("offlineMode"), toastId, "warning");
+        createToast(i18n.t("offlineMode"), { id: toastId, type: "warning", priority: true });
       } else {
         window.loggerAPI?.warn(`[changeWeek] Cache MISS, no data available`);
-        showToast(i18n.t("noDataForWeek"), toastId, "error");
+        createToast(i18n.t("noDataForWeek"), { id: toastId, type: "error", priority: true });
       }
       return;
     }
 
-    showToast(i18n.t("fetchingWeek"), toastId, "info");
+    createToast(i18n.t("fetchingWeek"), { id: toastId, duration: 0, type: "info", priority: true });
     window.loggerAPI?.debug(`[changeWeek] Calling fetchWeek with offset=${offset}`);
 
     const payload = await window.widgetAPI.fetchWeek(offset, currentWeek.toISOString());
@@ -945,14 +947,16 @@ async function changeWeek(offset) {
         window.loggerAPI?.info(`[changeWeek] Cache HIT, showing cached data`);
         currentWeek = new Date(cachedData.weekStart);
         await render(window.dateAPI.weekKey(currentWeek));
+        hideToast(toastId);
         if (!isOnline) {
-          showToast(i18n.t("offlineMode"), toastId, "warning");
+          createToast(i18n.t("offlineMode"), { id: toastId, type: "warning", priority: true });
         } else {
-          showToast(i18n.t("loadFailed"), toastId, "error");
+          createToast(i18n.t("loadFailed"), { id: toastId, type: "error", priority: true });
         }
       } else {
         window.loggerAPI?.warn(`[changeWeek] Cache MISS, no data available`);
-        showToast(i18n.t("noDataForWeek"), toastId, "error");
+        hideToast(toastId);
+        createToast(i18n.t("noDataForWeek"), { id: toastId, type: "error", priority: true });
       }
       return;
     }
@@ -960,14 +964,16 @@ async function changeWeek(offset) {
     window.loggerAPI?.info(`[changeWeek] Network fetch SUCCESS, rendering new week`);
     currentWeek = new Date(payload.weekStart);
     await render(window.dateAPI.weekKey(currentWeek));
-    createToast(i18n.t("fetchSuccess"), { id: toastId, duration: 2500, type: "success" });
+    hideToast(toastId);
+    createToast(i18n.t("fetchSuccess"), { id: toastId, duration: 2500, type: "success", priority: true });
 
   } catch (err) {
     window.loggerAPI?.error(`[changeWeek] ERROR: ${err?.message}`, err);
 
     if (err?.message?.includes("Cookie expired") || err?.message?.includes("Session") || err?.message?.includes("No cookies")) {
       window.loggerAPI?.warn(`[changeWeek] Session expired, triggering login`);
-      showToast(i18n.t("sessionExpired"), toastId, "error");
+      hideToast(toastId);
+      createToast(i18n.t("sessionExpired"), { id: toastId, type: "error", priority: true });
       window.widgetAPI.login();
       return;
     }
@@ -984,18 +990,21 @@ async function changeWeek(offset) {
         window.loggerAPI?.info(`[changeWeek] Cache fallback SUCCESS`);
         currentWeek = new Date(cachedData.weekStart);
         await render(window.dateAPI.weekKey(currentWeek));
+        hideToast(toastId);
         if (!isOnline) {
-          showToast(i18n.t("offlineMode"), toastId, "warning");
+          createToast(i18n.t("offlineMode"), { id: toastId, type: "warning", priority: true });
         } else {
-          showToast(i18n.t("loadFailed"), toastId, "error");
+          createToast(i18n.t("loadFailed"), { id: toastId, type: "error", priority: true });
         }
       } else {
         window.loggerAPI?.warn(`[changeWeek] Cache fallback FAILED`);
-        showToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), toastId, "error");
+        hideToast(toastId);
+        createToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), { id: toastId, type: "error", priority: true });
       }
     } catch (cacheErr) {
       window.loggerAPI?.error(`[changeWeek] Cache fallback exception:`, cacheErr);
-      showToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), toastId, "error");
+      hideToast(toastId);
+      createToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), { id: toastId, type: "error", priority: true });
     }
   } finally {
     isChangingWeek = false;

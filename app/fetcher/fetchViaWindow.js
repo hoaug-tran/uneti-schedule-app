@@ -13,19 +13,9 @@ import { logger } from "../utils/logger.js";
 let _win = null;
 let _winReady = false;
 let _winLoading = false;
-let _idleTimeout = null;
-
-function resetIdleTimeout() {
-  if (_idleTimeout) clearTimeout(_idleTimeout);
-  _idleTimeout = setTimeout(() => {
-    logger.debug("[fetchViaWindow] destroying hidden window due to idle timeout");
-    destroyFetchWindow();
-  }, 30000);
-}
 
 async function getOrCreateWindow() {
   if (_win && !_win.isDestroyed() && _winReady) {
-    resetIdleTimeout();
     return _win;
   }
 
@@ -39,7 +29,6 @@ async function getOrCreateWindow() {
       }, 100);
     });
     if (_win && !_win.isDestroyed() && _winReady) {
-      resetIdleTimeout();
       return _win;
     }
   }
@@ -80,7 +69,6 @@ async function getOrCreateWindow() {
         logger.debug("[fetchViaWindow] hidden window page loaded");
         _winReady = true;
         _winLoading = false;
-        resetIdleTimeout();
         resolve(_win);
       });
 
@@ -150,9 +138,5 @@ export function destroyFetchWindow() {
     _win.destroy();
     _win = null;
     _winReady = false;
-  }
-  if (_idleTimeout) {
-    clearTimeout(_idleTimeout);
-    _idleTimeout = null;
   }
 }

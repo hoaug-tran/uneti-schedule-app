@@ -439,7 +439,7 @@ function createWindow() {
     skipTaskbar: true,
     roundedCorners: true,
     webPreferences: {
-      preload: path.join(__dirname, "preload.mjs"),
+      preload: path.join(__dirname, "preload.cjs"),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -537,7 +537,19 @@ async function createTray() {
           await clearAllSchedules();
           logger.info("[Tray] Schedule data cleared by user");
           if (win && !win.isDestroyed()) {
-            win.webContents.send("login-required");
+            win.webContents.send("reload");
+            const { areCookiesValid } = await import("../app/fetcher/cookieManager.js");
+            if (await areCookiesValid()) {
+              try {
+                await getSchedule(0);
+                await getSchedule(1);
+                win.webContents.send("reload");
+              } catch (e) {
+                if (e?.message?.includes("Cookie expired") || e?.message?.includes("No cookies")) {
+                  win.webContents.send("login-required");
+                }
+              }
+            }
           }
         } catch (err) {
           logger.error(`[Tray] Failed to clear schedule data: ${err?.message}`);
@@ -552,7 +564,7 @@ async function createTray() {
           await clearAllCookies();
           await clearAllSchedules();
           logger.info("[Tray] User data cleared by user");
-          win?.webContents.send("login-required");
+          win?.webContents.send("reload");
         } catch (err) {
           logger.error(`[Tray] Failed to clear user data: ${err?.message}`);
         }
