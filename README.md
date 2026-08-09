@@ -29,14 +29,14 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 
 ## Tính năng chính
 
-- **Hiển thị lịch học theo tuần**: Giao diện trực quan, dễ theo dõi.
-- **Tính toán & Lập kế hoạch GPA (GPA Planner)**: Tự động nạp bảng điểm, tính GPA hệ 4 & hệ 10 chuẩn UNETI, tự phân loại các môn không tính GPA (`Non-GPA`) và tự đưa ra gợi ý cải thiện điểm số để đạt mục tiêu (Xuất sắc, Giỏi, Khá).
-- **Tự động làm mới**: Tuần hiện tại mỗi 1 giờ, tuần sau mỗi 6 giờ.
-- **Hoạt động offline**: Sử dụng lịch đã lưu ngay cả khi mất mạng.
-- **Giao diện & Chủ đề**: Hỗ trợ Chế độ Sáng/Tối (Dark/Light Theme) dịu mắt.
-- **Đa ngôn ngữ (i18n)**: Hỗ trợ song ngữ Tiếng Việt/English cho toàn bộ giao diện và đồng bộ cả Menu chuột phải khay hệ thống (System Tray).
-- **Tray Icon**: Truy cập nhanh dưới góc màn hình.
-- **Tự động kiểm tra cập nhật**: Thông báo tự động khi có phiên bản mới.
+- Hiển thị lịch học theo tuần
+- Tự động làm mới: tuần hiện tại mỗi 1 giờ, tuần sau mỗi 6 giờ
+- Hoạt động offline (dùng lịch đã lưu)
+- Tính toán & Lập kế hoạch GPA: Tự động load bảng điểm, tính GPA hệ 4 và tự đưa ra gợi ý cải thiện điểm số để đạt mục tiêu (Xuất sắc, Giỏi, Khá).
+- Dark/Light theme
+- Tiếng Việt/English
+- Tray icon để truy cập nhanh
+- Tự động kiểm tra cập nhật mỗi 6 giờ
 
 ## Cài đặt
 
@@ -66,14 +66,16 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 > [!CAUTION]
 > **Lưu ý về cảnh báo Virus / Windows SmartScreen:**
 > Ứng dụng này KHÔNG chứa virus, malware, spyware hay bất kỳ mã độc nào. Do mình không có kinh phí (khoảng 5-7 triệu VNĐ/năm) để duy trì chứng chỉ xác thực từ Microsoft, nên Windows sẽ tự động gắn cờ đây là "Phần mềm không xác định" (Unknown Publisher).
-> 
+>
 > **Ứng dụng sạch 100% và mã nguồn mở.** Bạn có thể tự mình kiểm tra code ngay tại repository này để yên tâm.
 >
 > **Để mở ứng dụng:**
+>
 > 1. Bấm vào **More info** (Thêm thông tin).
 > 2. Chọn **Run anyway** (Vẫn chạy).
-> 
-> *Lưu ý quan trọng:* 
+>
+> _Lưu ý quan trọng:_
+>
 > - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
 
 ### Kết quả quét VirusTotal
@@ -106,12 +108,12 @@ Mở ứng dụng lần đầu sẽ hiện cửa sổ đăng nhập. Nhập tài
 
 Sau khi đăng nhập, lịch sẽ tự động hiển thị. Dùng nút "← Trước" và "Sau →" để chuyển tuần.
 
-### Xem & Lập kế hoạch GPA (GPA Planner)
+### Xem & Lập kế hoạch GPA
 
-1. Click vào nút **GPA** trên thanh điều khiển của ứng dụng.
-2. Hệ thống sẽ tự động nạp kết quả học tập chính thức từ trang sinh viên UNETI và tính toán **GPA Hệ 4** & **GPA Hệ 10** (theo kỳ và toàn khóa).
-3. Chọn mục tiêu xếp loại mong muốn (như **Xuất sắc $\ge 3.60$**, **Giỏi $\ge 3.20$**, **Khá $\ge 2.50$**). Hệ thống sẽ phân tích và đưa ra gợi ý thông minh (ví dụ: *Cần cải thiện lên điểm A cho 2 môn để đạt mục tiêu*).
-4. Các môn không tính GPA (như Thể dục, Quốc phòng, kiểm tra Tiếng Anh đầu vào TOEIC...) được nhận diện và phân loại nhãn `Non-GPA` rõ ràng.
+1. Click vào nút **GPA** trên thanh điều hướng.
+2. Hệ thống sẽ tự động load kết quả học tập chính thức từ trang sinh viên UNETI và tính toán GPA hệ 4 (theo kỳ và toàn khóa).
+3. Chọn mục tiêu xếp loại mong muốn (như **Xuất sắc $\ge 3.60$**, **Giỏi $\ge 3.20$**, **Khá $\ge 2.50$**). Hệ thống sẽ phân tích và đưa ra gợi ý thông minh (ví dụ: _Cần cải thiện lên điểm A cho 2 môn để đạt mục tiêu_).
+4. Các môn không tính GPA (như Thể dục, Quốc phòng, kiểm tra Tiếng Anh đầu vào TOEIC...) được nhận diện và tự phân loại là không tính vào GPA.
 
 ### Làm mới lịch
 
@@ -151,6 +153,7 @@ A: Có. Khi mất mạng, ứng dụng sẽ dùng lịch đã lưu. Khi có mạ
 
 **Q: Tại sao khi cài ứng dụng nặng ~300MB?**  
 A: Vì đây là ứng dụng Electron nên bộ cài phải chứa:
+
 - Electron runtime (~200MB+)
 - Native modules (keytar, better-sqlite3…)
 - Tài nguyên giao diện
@@ -169,6 +172,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Mô tả lỗi**: Click nút Đăng nhập nhưng không mở cửa sổ đăng nhập.
 
 **Thử các cách sau**:
+
 1. Kiểm tra kết nối internet
 2. Tắt firewall/antivirus tạm thời
 3. Tắt ứng dụng đi và mở lại
@@ -179,6 +183,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Mô tả lỗi**: Lịch không khớp với trang web UNETI.
 
 **Thử các cách sau**:
+
 1. Click nút "Làm mới"
 2. Nếu vẫn sai: Chuột phải tray → Xoá dữ liệu lịch → Thử lại
 3. Kiểm tra log: Chuột phải tray → Xem file log (xem tên các buổi học có xuất hiện hay không)
@@ -196,6 +201,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Mô tả lỗi**: Dù đã có mạng nhưng vẫn hiện thông báo offline.
 
 **Thử các cách sau**:
+
 1. Đợi 5-10 giây
 2. Click nút "Làm mới"
 3. Khởi động lại ứng dụng
@@ -206,12 +212,14 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Mô tả lỗi**: Ứng dụng không tự cập nhật phiên bản mới, hoặc đơn giản là không thể tự động cập nhật.
 
 **Nguyên nhân có thể**:
+
 - Kết nối mạng không ổn định
 - Quyền ghi file bị chặn bởi antivirus / Windows Defender
 - File update bị xóa trong quá trình tải
 - Do thằng dev làm hỏng... (khả năng cao)
 
 **Giải pháp**:
+
 1. Thoát hoàn toàn ứng dụng
 2. Truy cập trang [Releases](https://github.com/hoaug-tran/uneti-schedule-app/releases)
 3. Tải và cài đặt **phiên bản mới nhất**
@@ -226,6 +234,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Mô tả lỗi**: Dù đã bật "Khởi động cùng Windows" nhưng không tự khởi động.
 
 **Thử các cách sau**:
+
 1. Chuột phải vào tray icon → Tắt "Khởi động cùng Windows"
 2. Đợi 2 giây
 3. Chuột phải vào tray icon → Bật lại
