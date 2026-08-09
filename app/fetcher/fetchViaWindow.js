@@ -1,10 +1,3 @@
-/**
- *
- * Bypass Cloudflare Bot Protection bằng cách chạy fetch() từ trong
- * một BrowserWindow ẩn dùng cùng partition với login window.
- * Hay lắm web UNETI
- */
-
 import { BrowserWindow } from "electron";
 import { getCookiePartition } from "./cookieManager.js";
 import { CONFIG } from "../config.js";
@@ -81,30 +74,30 @@ async function getOrCreateWindow() {
   });
 }
 
-export async function postViaWindow(body, label) {
+export async function requestViaWindow({ endpoint, referer, method = "GET", body = null, label = "request" }) {
   const win = await getOrCreateWindow();
-
-  const endpoint = CONFIG.UNETI_SCHEDULE_ENDPOINT;
-  const referer = "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html";
-
   const script = `
     (async () => {
       try {
-        const res = await fetch(${JSON.stringify(endpoint)}, {
-          method: 'POST',
+        const init = {
+          method: ${JSON.stringify(method)},
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
             'X-Requested-With': 'XMLHttpRequest',
             'Referer': ${JSON.stringify(referer)},
           },
-          body: ${JSON.stringify(body)},
           credentials: 'include',
-        });
+        };
+        if (${JSON.stringify(body)} !== null) {
+          init.headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+          init.body = ${JSON.stringify(body)};
+        }
+        const res = await fetch(${JSON.stringify(endpoint)}, init);
         const status = res.status;
+        const url = res.url;
         const text = await res.text();
-        return { ok: res.ok, status, text };
+        return { ok: res.ok, status, url, text };
       } catch (e) {
-        return { ok: false, status: 0, text: '', error: String(e.message) };
+        return { ok: false, status: 0, url: '', text: '', error: String(e.message) };
       }
     })()
   `;
@@ -119,17 +112,21 @@ export async function postViaWindow(body, label) {
     throw new Error(`executeJavaScript failed for ${label}: ${err?.message}`);
   }
 
-  if (result.error) {
-    throw new Error(`Network error when fetching schedule (${label}): ${result.error}`);
-  }
-
-  if (!result.ok) {
-    throw new Error(
-      `HTTP ${result.status} when fetching schedule (${label}). ${result.text.slice(0, 120)}`
-    );
-  }
+  if (result.error) throw new Error(`Network error when fetching ${label}: ${result.error}`);
+  if (!result.ok) throw new Error(`HTTP ${result.status} when fetching ${label}. ${result.text.slice(0, 120)}`);
 
   logger.debug(`[fetchViaWindow] ${label}: HTTP ${result.status}, length ${result.text.length}`);
+  return result;
+}
+
+export async function postViaWindow(body, label) {
+  const result = await requestViaWindow({
+    endpoint: CONFIG.UNETI_SCHEDULE_ENDPOINT,
+    referer: "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html",
+    method: "POST",
+    body,
+    label,
+  });
   return result.text;
 }
 
@@ -140,3 +137,4 @@ export function destroyFetchWindow() {
     _winReady = false;
   }
 }
+

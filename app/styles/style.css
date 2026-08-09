@@ -16,7 +16,6 @@
   --success-text: #e0e7ff;
 }
 
-/* light */
 [data-theme="light"] {
   --bg: #f5f5f7;
   --panel: #ffffff;
@@ -42,18 +41,20 @@
 }
 
 html,
-body {
+body,
+#content {
+  width: 100%;
   height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 body {
-  margin: 0;
-  padding: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
-  overflow: hidden;
   position: relative;
 }
 
@@ -97,23 +98,32 @@ body {
   border-color: var(--accent);
 }
 
+#content {
+  display: flex;
+  flex-direction: column;
+}
+
 .shell {
   width: 100%;
   height: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px;
-  border-radius: 10px;
+  padding: 8px 10px;
   background: var(--bg);
-  border: 1px solid #2a2a2a;
+  border: none;
+  border-radius: 0;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid #2a2a2a;
 }
@@ -121,15 +131,17 @@ body {
 .title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 18px;
+  gap: 6px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .title .logo {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
 }
 
@@ -137,7 +149,7 @@ body {
   font-size: 11px;
   font-weight: normal;
   color: var(--muted);
-  margin-left: 6px;
+  margin-left: 4px;
   background: none;
   -webkit-text-fill-color: var(--muted);
 }
@@ -147,35 +159,44 @@ body {
 .actions .right-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .actions .right-group {
   margin-left: auto;
 }
 
-button {
+button,
+.lang-btn {
   appearance: none;
-  border: 0;
+  border: 1px solid #3a3a3a;
   cursor: pointer;
-  padding: 7px 14px;
-  min-width: 90px;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 10px;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   background: var(--card);
   color: var(--text);
-  border: 1px solid #3a3a3a;
   transition: all 0.15s ease;
+  line-height: 1;
 }
 
-button:hover {
+button:hover,
+.lang-btn:hover {
   background: var(--card-hover);
   border-color: var(--accent);
   color: var(--accent-light);
 }
 
-button:active {
+button:active,
+.lang-btn:active {
   opacity: 0.9;
 }
 
@@ -189,18 +210,22 @@ button[disabled] {
   transform: none !important;
 }
 
-
 .theme-btn {
-  min-width: 40px !important;
-  padding: 7px 10px !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
 }
 
 .theme-btn .icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   stroke-width: 2;
 }
 
@@ -214,17 +239,18 @@ button[disabled] {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .calendar {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
+  height: 100%;
   max-height: 100%;
   display: flex;
   gap: 14px;
   overflow-x: auto;
   overflow-y: auto;
-  height: 500px;
   opacity: 1;
   transition: opacity 0.2s ease-in-out;
 }
@@ -759,4 +785,248 @@ button[disabled] {
   to {
     opacity: 1;
   }
+}
+.gpa-panel {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  background: var(--bg);
+  border: none;
+  padding: 4px 2px 12px 2px;
+  box-sizing: border-box;
+}
+
+.gpa-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.gpa-head-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.gpa-head-sub {
+  margin: 4px 0 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.gpa-head select {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gpa-semester {
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.gpa-semester-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+}
+
+.gpa-semester-head b {
+  color: var(--accent-light);
+  font-weight: 700;
+}
+
+.gpa-semester-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gpa-panel table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.gpa-panel th,
+.gpa-panel td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+  word-wrap: break-word;
+}
+
+.gpa-panel th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.gpa-col-name { width: 42%; text-align: left; }
+.gpa-col-tc { width: 10%; text-align: center; }
+.gpa-col-letter { width: 14%; text-align: center; }
+.gpa-col-score { width: 14%; text-align: center; }
+.gpa-col-suggest { width: 20%; text-align: center; }
+
+.gpa-cell-center { text-align: center; }
+
+.grade-pill {
+  display: inline-flex;
+  min-width: 28px;
+  justify-content: center;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.grade-pill.grade-a { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+.grade-pill.grade-b { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+.grade-pill.grade-c { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+.grade-pill.grade-d, .grade-pill.grade-f { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+.gpa-need {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  font-weight: 700;
+  font-size: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.gpa-tag-nogpa {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gpa-tag-pending {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+#btn-gpa.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.gpa-panel::-webkit-scrollbar { width: 8px; }
+.gpa-panel::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 999px; }
+.skeleton-line, .gpa-skeleton-row span { display: block; height: 14px; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,.07), rgba(255,255,255,.16), rgba(255,255,255,.07)); background-size: 200% 100%; animation: skeletonPulse 1.1s ease-in-out infinite; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w30 { width: 30%; }
+.gpa-skeleton-list { padding: 10px 12px; }
+.gpa-skeleton-row { display: grid; grid-template-columns: 1fr 54px 72px; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+@keyframes skeletonPulse { to { background-position: -200% 0; } }
+
+[data-theme="light"] .gpa-head {
+  background: var(--card);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .gpa-head-title {
+  color: var(--text);
+}
+[data-theme="light"] .gpa-head select {
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .gpa-semester {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .gpa-semester-head {
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .gpa-semester-head b {
+  color: var(--accent-light);
+}
+[data-theme="light"] .gpa-panel th {
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--muted);
+}
+[data-theme="light"] .gpa-panel td {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .grade-pill {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+}
+[data-theme="light"] .grade-pill.grade-a {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+[data-theme="light"] .grade-pill.grade-b {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+[data-theme="light"] .grade-pill.grade-c {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+[data-theme="light"] .grade-pill.grade-d,
+[data-theme="light"] .grade-pill.grade-f {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+[data-theme="light"] .gpa-need {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+[data-theme="light"] .gpa-tag-nogpa {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--muted);
+}
+[data-theme="light"] .gpa-tag-pending {
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }

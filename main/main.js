@@ -35,6 +35,10 @@ import {
   stopCookieRefreshService,
 } from "../app/fetcher/cookieRefresh.js";
 import { closeDatabase, loadScheduleAsync } from "../app/fetcher/scheduleDb.js";
+import { isAuthError } from "../app/fetcher/sessionState.js";
+import { getAcademicResults } from "../app/fetcher/getAcademicResults.js";
+import { loadAcademicResults } from "../app/fetcher/academicDb.js";
+import { planGpa } from "../app/utils/gpa.js";
 import { weekKey } from "../app/utils/date.js";
 import { i18nInstance as i18n } from "../app/utils/i18n.js";
 
@@ -68,6 +72,22 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let tray, win;
+let loginRequiredInFlight = false;
+
+async function requireLogin(reason = "Session expired") {
+  if (loginRequiredInFlight) return;
+  loginRequiredInFlight = true;
+  try {
+    logger.warn(`[auth] require login: ${reason}`);
+    const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
+    await clearAllCookies();
+    stopCookieRefreshService();
+    win?.webContents.send("login-required");
+    win?.webContents.send("status", "Session expired, please login again.");
+  } finally {
+    setTimeout(() => { loginRequiredInFlight = false; }, 3000);
+  }
+}
 const autoLauncher = new AutoLaunch({
   name: CONFIG.APP_NAME,
   path: process.execPath,
@@ -109,6 +129,31 @@ ipcMain.on("logger:log", (_, level, message, context) => {
   }
 });
 
+ipcMain.handle("academic:load-file", async () => loadAcademicResults());
+
+ipcMain.handle("academic:refresh", async () => {
+  try {
+    logger.debug("[IPC] academic:refresh");
+    const data = await getAcademicResults();
+    return { ok: true, data };
+  } catch (err) {
+    logger.warn(`[academic:refresh] fail: ${err?.message}`);
+    if (isAuthError(err)) await requireLogin(err?.message);
+    return { ok: false, error: err?.message || String(err), auth: isAuthError(err) };
+  }
+});
+
+ipcMain.handle("gpa:plan", async (_, target) => {
+  try {
+    const data = await loadAcademicResults();
+    if (!data?.subjects?.length) return { ok: false, error: "No academic results" };
+    return { ok: true, data: planGpa(data.subjects, target) };
+  } catch (err) {
+    logger.warn(`[gpa:plan] fail: ${err?.message}`);
+    return { ok: false, error: err?.message || String(err) };
+  }
+});
+
 ipcMain.handle("widget:refresh", async () => {
   try {
     logger.debug("[IPC] widget:refresh");
@@ -131,8 +176,8 @@ ipcMain.handle("widget:refresh", async () => {
   } catch (err) {
     logger.warn(`[widget:refresh] fail: ${err?.message}`);
     const msg = String(err || "");
-    if (msg.includes("Cookie expired") || msg.includes("No cookies")) {
-      win?.webContents.send("login-required");
+    if (isAuthError(err)) {
+      await requireLogin(err?.message);
     } else {
       win?.webContents.send("reload");
     }
@@ -184,6 +229,21 @@ ipcMain.handle("widget:login", async () => {
   } catch (err) {
     logger.error(`[IPC] widget:login error: ${err?.message}`);
     win?.webContents.send("status", "Login failed.");
+  }
+});
+
+ipcMain.handle("widget:logout", async () => {
+  try {
+    logger.info("[IPC] widget:logout START");
+    const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
+    await clearAllCookies();
+    await clearAllSchedules();
+    logger.info("[IPC] User logged out successfully");
+    win?.webContents.send("reload");
+    return { success: true };
+  } catch (err) {
+    logger.error(`[IPC] widget:logout error: ${err?.message}`);
+    return { success: false, error: err?.message };
   }
 });
 
@@ -336,8 +396,8 @@ ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
   } catch (err) {
     logger.warn(`fetch-week error: ${err?.message}`);
     const msg = err?.message || String(err);
-    if (msg.includes("Cookie expired") || msg.includes("No cookies") || msg.includes("stale session")) {
-      win?.webContents.send("login-required");
+    if (isAuthError(err)) {
+      await requireLogin(err?.message);
     }
     throw err;
   }
@@ -517,7 +577,11 @@ async function createTray() {
     if (win.isVisible()) win.hide();
     else showWindow();
   });
+  await updateTrayContextMenu();
+}
 
+async function updateTrayContextMenu() {
+  if (!tray) return;
   const enabled = await autoLauncher.isEnabled();
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -527,6 +591,7 @@ async function createTray() {
       click: async (menuItem) => {
         if (menuItem.checked) await autoLauncher.enable();
         else await autoLauncher.disable();
+        updateTrayContextMenu();
       },
     },
     { type: "separator" },
@@ -538,18 +603,6 @@ async function createTray() {
           logger.info("[Tray] Schedule data cleared by user");
           if (win && !win.isDestroyed()) {
             win.webContents.send("reload");
-            const { areCookiesValid } = await import("../app/fetcher/cookieManager.js");
-            if (await areCookiesValid()) {
-              try {
-                await getSchedule(0);
-                await getSchedule(1);
-                win.webContents.send("reload");
-              } catch (e) {
-                if (e?.message?.includes("Cookie expired") || e?.message?.includes("No cookies")) {
-                  win.webContents.send("login-required");
-                }
-              }
-            }
           }
         } catch (err) {
           logger.error(`[Tray] Failed to clear schedule data: ${err?.message}`);
@@ -585,44 +638,31 @@ async function createTray() {
       label: i18n.t("trayAbout"),
       submenu: [
         {
-          label: `Widget Lịch học UNETI v${appVersion}`,
-          enabled: false
+          label: `${i18n.t("aboutTitle")}`,
+          enabled: false,
         },
         { type: "separator" },
         {
           label: `${i18n.t("aboutDeveloper")}: Trần Kính Hoàng (hoaug)`,
-          enabled: false
+          enabled: false,
         },
         {
-          label: "GitHub: hoaug-tran",
+          label: `${i18n.t("aboutGitHub")}: uneti-schedule-app`,
           click: () => {
-            shell.openExternal("https://github.com/hoaug-tran").catch(err => {
+            shell.openExternal("https://github.com/hoaug-tran/uneti-schedule-app").catch((err) => {
               logger.error(`Failed to open GitHub: ${err?.message}`);
             });
-          }
-        },
-        {
-          label: "Facebook: hoaugtr",
-          click: () => {
-            shell.openExternal("https://facebook.com/hoaugtr").catch(err => {
-              logger.error(`Failed to open Facebook: ${err?.message}`);
-            });
-          }
+          },
         },
         {
           label: `${i18n.t("aboutEmail")}: hi@trkhoang.com`,
           click: () => {
-            shell.openExternal("mailto:hi@trkhoang.com").catch(err => {
+            shell.openExternal("mailto:hi@trkhoang.com").catch((err) => {
               logger.error(`Failed to open email: ${err?.message}`);
             });
-          }
+          },
         },
-        { type: "separator" },
-        {
-          label: "© 2026 Trần Kính Hoàng",
-          enabled: false
-        }
-      ]
+      ],
     },
     { type: "separator" },
     {
@@ -646,6 +686,13 @@ async function createTray() {
   ]);
   tray.setContextMenu(contextMenu);
 }
+
+ipcMain.on("i18n:set-lang", (_evt, lang) => {
+  if (lang) {
+    i18n.setLanguage(lang);
+    updateTrayContextMenu();
+  }
+});
 
 function showWindow() {
   if (!win || win.isDestroyed()) return;
@@ -683,7 +730,6 @@ app.whenReady().then(async () => {
       const result0 = await getSchedule(0);
       const result1 = await getSchedule(1);
 
-      // Check if any result has stale warning
       if (result0?.staleWarning || result1?.staleWarning) {
         const i18nKey = result0?.staleMessage || result1?.staleMessage || "staleDataWarning";
         logger.warn(`[main] Stale data detected - forcing logout: ${i18nKey}`);
@@ -810,9 +856,9 @@ app.whenReady().then(async () => {
       const errMsg = err?.message || String(err);
       logger.warn(`[main] autoRefresh current week failed: ${errMsg}`);
 
-      if (errMsg.includes("Cookie expired") || errMsg.includes("stale session")) {
+      if (isAuthError(err)) {
         logger.warn("[main] autoRefresh detected expired session");
-        win?.webContents.send("login-required");
+        await requireLogin(errMsg);
       }
     }
   }, CONFIG.AUTO_REFRESH_INTERVAL_MS);
@@ -826,9 +872,9 @@ app.whenReady().then(async () => {
       const errMsg = err?.message || String(err);
       logger.warn(`[main] autoRefresh next week failed: ${errMsg}`);
 
-      if (errMsg.includes("Cookie expired") || errMsg.includes("stale session")) {
+      if (isAuthError(err)) {
         logger.warn("[main] autoRefresh next week detected expired session");
-        win?.webContents.send("login-required");
+        await requireLogin(errMsg);
       }
     }
   }, CONFIG.AUTO_REFRESH_NEXT_WEEK_MS);

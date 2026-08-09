@@ -9,75 +9,16 @@ let justLoggedIn = false;
 
 const $ = (s, r = document) => r.querySelector(s);
 
-try {
-  const { ipcRenderer } = require('electron');
-  ipcRenderer.on('toast-warning', (event, i18nKey) => {
-    const showWarning = () => {
-      const message = i18n.t(i18nKey);
-      console.warn(`[renderer] Stale data warning: ${message}`);
-
-      if (typeof createToast === 'function') {
-        createToast(message, {
-          id: "stale-data-warning",
-          duration: 0,
-          type: "warning",
-          clickable: true
-        });
-      } else {
-        setTimeout(() => {
-          if (typeof createToast === 'function') {
-            createToast(message, {
-              id: "stale-data-warning",
-              duration: 0,
-              type: "warning",
-              clickable: true
-            });
-          }
-        }, 2000);
-      }
-    };
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', showWarning);
-    } else {
-      showWarning();
-    }
+if (typeof window !== "undefined" && window.statusAPI) {
+  window.statusAPI.onToastWarning?.((i18nKey) => {
+    const message = i18n.t(i18nKey);
+    createToast(message, { id: "stale-data-warning", duration: 0, type: "warning", priority: true, clickable: true });
   });
 
-  ipcRenderer.on('toast-stale-logout', (event, i18nKey) => {
-    const showWarning = () => {
-      const message = i18n.t(i18nKey);
-      console.warn(`[renderer] Stale data - forced logout: ${message}`);
-
-      if (typeof createToast === 'function') {
-        createToast(message, {
-          id: "stale-data-logout",
-          duration: 8000,
-          type: "warning",
-          clickable: false
-        });
-      } else {
-        setTimeout(() => {
-          if (typeof createToast === 'function') {
-            createToast(message, {
-              id: "stale-data-logout",
-              duration: 8000,
-              type: "warning",
-              clickable: false
-            });
-          }
-        }, 2000);
-      }
-    };
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', showWarning);
-    } else {
-      showWarning();
-    }
+  window.statusAPI.onToastStaleLogout?.((i18nKey) => {
+    const message = i18n.t(i18nKey);
+    createToast(message, { id: "stale-data-logout", duration: 8000, type: "warning", priority: true });
   });
-} catch (e) {
-  console.warn(`Failed to setup toast-warning/logout listener: ${e?.message}`);
 }
 
 function setStatus(msg) {
@@ -544,7 +485,17 @@ function registerIpcListeners() {
 
   window.addEventListener("languagechange", async () => {
     window.loggerAPI?.debug("language changed, re-rendering");
+    const btnGpa = document.getElementById("btn-gpa");
+    const wasGpa = btnGpa && btnGpa.dataset.view === "gpa";
+
     await render(window.dateAPI.weekKey(currentWeek));
+
+    if (wasGpa) {
+      const newBtnGpa = document.getElementById("btn-gpa");
+      if (newBtnGpa) {
+        newBtnGpa.click();
+      }
+    }
   });
 }
 
@@ -570,6 +521,7 @@ async function render(isoDate) {
     if (payload && payload.weekStart) {
       state = "ok";
       justLoggedIn = false;
+      loginLabel = i18n.t("logout");
       currentWeek = new Date(payload.weekStart);
       window.loggerAPI?.debug(`[render] Updated currentWeek to: ${currentWeek.toISOString()}`);
     } else if (hasCookies) {
@@ -708,6 +660,7 @@ async function render(isoDate) {
           <button id="btn-update">${i18n.t("checkUpdate")}</button>
           <button id="btn-login">${loginLabel}</button>
           <button id="btn-refresh">${i18n.t("refresh")}</button>
+          <button id="btn-gpa">GPA</button>
         </div>
         <div class="right-group">
           <button id="btn-theme" class="theme-btn" title="Toggle theme">
@@ -753,6 +706,7 @@ async function render(isoDate) {
     const btnUpdate = $("#btn-update");
     const btnLogin = $("#btn-login");
     const btnRefresh = $("#btn-refresh");
+    const btnGpa = $("#btn-gpa");
     const btnHide = $("#btn-hide");
     const btnExit = $("#btn-exit");
     const btnPrevWeek = $("#btn-prev-week");
@@ -816,49 +770,331 @@ async function render(isoDate) {
         }
       };
     }
-    if (btnLogin) btnLogin.onclick = () => window.widgetAPI.login();
-    if (btnRefresh) btnRefresh.onclick = async () => {
-      btnRefresh.disabled = true;
-      hideToast("refresh-success");
-      hideToast("refresh-error");
-      createToast(i18n.t("fetchingWeek"), { id: "refresh-loading", duration: 0, type: "info", priority: true });
-      try {
-        await window.widgetAPI.refresh();
-        hideToast("refresh-loading");
-        createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success", priority: true });
-      } catch (e) {
-        hideToast("refresh-loading");
-        createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error", priority: true });
-      } finally {
-        btnRefresh.disabled = false;
-      }
-    };
+    if (btnGpa) {
+      btnGpa.onclick = async () => {
+        const body = document.querySelector(".body");
+
+        const footerBar = document.querySelector(".footer-bar");
+
+        if (btnGpa.dataset.view === "gpa") {
+          btnGpa.dataset.view = "schedule";
+          btnGpa.textContent = "GPA";
+          btnGpa.classList.remove("active");
+          if (footerBar) footerBar.style.display = "";
+          await render(window.dateAPI.weekKey(currentWeek));
+          return;
+        }
+
+        btnGpa.dataset.view = "gpa";
+        btnGpa.textContent = i18n.t("scheduleTab");
+        btnGpa.classList.add("active");
+        if (footerBar) footerBar.style.display = "none";
+
+        body.innerHTML = `
+          <div class="gpa-panel">
+            <div class="gpa-head">
+              <div>
+                <h3 class="gpa-head-title">${i18n.t("gpaTitle")}</h3>
+                <p class="gpa-head-sub">${i18n.t("gpaLoading")}</p>
+              </div>
+              <select disabled><option>${i18n.t("gpaTargetGood")}</option></select>
+            </div>
+            ${Array.from({ length: 4 })
+              .map(
+                () => `
+              <section class="gpa-semester">
+                <div class="gpa-semester-head">
+                  <b class="skeleton-line w40"></b>
+                  <span class="skeleton-line w30"></span>
+                </div>
+                <div class="gpa-skeleton-list">
+                  ${Array.from({ length: 4 })
+                    .map(
+                      () => `
+                    <div class="gpa-skeleton-row"><span></span><span></span><span></span></div>
+                  `
+                    )
+                    .join("")}
+                </div>
+              </section>
+            `
+              )
+              .join("")}
+          </div>
+        `;
+
+        const esc = (v) =>
+          String(v ?? "").replace(
+            /[&<>"]/g,
+            (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+          );
+
+        const isGpaSubj = (s) => {
+          const name = String(s?.subjectName ?? "").toLowerCase().trim();
+          if (!name) return false;
+          if (name.includes("giáo dục thể chất") || name.includes("gdtc")) return false;
+          if (name.includes("giáo dục quốc phòng") || name.includes("gdqp")) return false;
+          if (name.includes("điểm test") || name.includes("toeic")) return false;
+          return true;
+        };
+
+        const calcSemGpa = (items, semSummary) => {
+          if (semSummary?.semGpa4 != null) {
+            const gpaItems = items.filter(isGpaSubj);
+            const credits = gpaItems.reduce((sum, s) => sum + (Number(s.credits) || 0), 0);
+            return { gpa: semSummary.semGpa4, credits: semSummary.accumulatedCredits ?? credits };
+          }
+          const gpaItems = items.filter((s) => isGpaSubj(s) && !s.isPending && s.gradePoint !== null);
+          const credits = gpaItems.reduce((sum, s) => sum + (Number(s.credits) || 0), 0);
+          if (!credits) return { gpa: 0, credits: 0 };
+          const weighted = gpaItems.reduce((sum, s) => sum + (Number(s.gradePoint) || 0) * (Number(s.credits) || 0), 0);
+          return { gpa: weighted / credits, credits };
+        };
+
+        const getGradeClass = (letter) => {
+          const l = String(letter || "").trim().toUpperCase();
+          if (l.startsWith("A")) return "grade-a";
+          if (l.startsWith("B")) return "grade-b";
+          if (l.startsWith("C")) return "grade-c";
+          if (l.startsWith("D") || l === "F") return "grade-d";
+          return "";
+        };
+
+        const renderView = async (data, selectedTarget = "good") => {
+          const footerBar = document.querySelector(".footer-bar");
+          if (footerBar) footerBar.style.display = "none";
+
+          if (!data?.subjects?.length) {
+            body.innerHTML = `<div class="gpa-panel"><div class="gpa-head"><div><h3 class="gpa-head-title">${i18n.t("gpaNoDataTitle")}</h3><p class="gpa-head-sub">${i18n.t("gpaNoDataDesc")}</p></div></div></div>`;
+            return;
+          }
+
+          const plan = await window.academicAPI?.plan?.(selectedTarget);
+          const suggestionMap = new Map();
+          (plan?.data?.suggestions || []).forEach((x) => {
+            if (x.index >= 0) suggestionMap.set(`idx:${x.index}`, x);
+            if (x.key) suggestionMap.set(`key:${x.key}`, x);
+            if (x.subjectCode) suggestionMap.set(`code:${String(x.subjectCode).trim().toLowerCase()}`, x);
+            if (x.subjectName) suggestionMap.set(`name:${String(x.subjectName).trim().toLowerCase()}`, x);
+          });
+
+          const groups = data.subjects.reduce((acc, s) => {
+            const sem = s.semester || i18n.t("unknownSemester");
+            (acc[sem] ||= []).push(s);
+            return acc;
+          }, {});
+
+          const targetLabels = {
+            excellent: i18n.t("gpaTargetExcellent"),
+            good: i18n.t("gpaTargetGood"),
+            fair: i18n.t("gpaTargetFair"),
+          };
+
+          const currentGpa = data?.summary?.cumGpa4 ?? plan?.data?.gpa ?? 0;
+          const totalCredits = plan?.data?.credits ?? 0;
+          const regCredits = data?.summary?.registeredCredits;
+          const accCredits = data?.summary?.accumulatedCredits;
+
+          const unitStr = i18n.t("gpaCreditsUnit");
+          let creditLabel = "";
+          if (accCredits != null && regCredits != null) {
+            creditLabel = `${accCredits}/${regCredits} ${unitStr}`;
+          } else {
+            creditLabel = `${totalCredits} ${unitStr}`;
+          }
+
+          const achieved = plan?.data?.achieved;
+          const suggestCount = plan?.data?.suggestions?.length ?? 0;
+
+          let statusMsg = "";
+          if (achieved) {
+            statusMsg = i18n.t("gpaAchieved").replace("{target}", targetLabels[selectedTarget] || "");
+          } else {
+            statusMsg = i18n.t("gpaImproveNeeded").replace("{count}", suggestCount);
+          }
+
+          const sectionsHtml = Object.entries(groups)
+            .map(([semester, subjects]) => {
+              const semSummary = data?.semesterSummaries?.[semester];
+              const semStats = calcSemGpa(subjects, semSummary);
+              const rowsHtml = subjects
+                .map((s) => {
+                  const idx = data.subjects.indexOf(s);
+                  const isGpa = isGpaSubj(s);
+                  const isPending = s.isPending || (!s.letter && s.gradePoint === null && s.finalScore === null);
+                  const sKey = String(s.subjectCode || s.subjectName || "").trim().toLowerCase();
+                  const sCode = String(s.subjectCode || "").trim().toLowerCase();
+                  const sName = String(s.subjectName || "").trim().toLowerCase();
+
+                  const sug = isGpa && !isPending ? (
+                    suggestionMap.get(`idx:${idx}`) ||
+                    suggestionMap.get(`key:${sKey}`) ||
+                    (sCode ? suggestionMap.get(`code:${sCode}`) : null) ||
+                    (sName ? suggestionMap.get(`name:${sName}`) : null)
+                  ) : null;
+
+                  const gradeCls = getGradeClass(s.letter);
+
+                  let suggestCell = "";
+                  if (isPending) {
+                    suggestCell = `<span class="gpa-tag-pending">${i18n.t("gpaTagPending")}</span>`;
+                  } else if (!isGpa) {
+                    suggestCell = `<span class="gpa-tag-nogpa">${i18n.t("gpaTagNoGpa")}</span>`;
+                  } else if (sug) {
+                    suggestCell = `<span class="gpa-need">${i18n.t("gpaTagNeedA")}</span>`;
+                  }
+
+                  const letterCell = isPending
+                    ? `<span class="gpa-tag-pending">${i18n.t("gpaTagPendingLetter")}</span>`
+                    : s.letter
+                    ? `<span class="grade-pill ${gradeCls}">${esc(s.letter)}</span>`
+                    : `-`;
+
+                  return `
+                    <tr>
+                      <td class="gpa-col-name">${esc(s.subjectName)}</td>
+                      <td class="gpa-col-tc gpa-cell-center">${s.credits ?? "-"}</td>
+                      <td class="gpa-col-letter gpa-cell-center">${letterCell}</td>
+                      <td class="gpa-col-score gpa-cell-center">${s.finalScore != null ? s.finalScore.toFixed(1) : "-"}</td>
+                      <td class="gpa-col-suggest gpa-cell-center">${suggestCell}</td>
+                    </tr>
+                  `;
+                })
+                .join("");
+
+              const semSummaryText = i18n
+                .t("gpaSemSummary")
+                .replace("{gpa}", semStats.gpa.toFixed(2))
+                .replace("{credits}", semStats.credits);
+
+              return `
+                <section class="gpa-semester">
+                  <div class="gpa-semester-head">
+                    <b>${esc(semester)}</b>
+                    <span>${semSummaryText}</span>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th class="gpa-col-name">${i18n.t("gpaColSubject")}</th>
+                        <th class="gpa-col-tc gpa-cell-center">${i18n.t("gpaColCredits")}</th>
+                        <th class="gpa-col-letter gpa-cell-center">${i18n.t("gpaColLetter")}</th>
+                        <th class="gpa-col-score gpa-cell-center">${i18n.t("gpaColScore")}</th>
+                        <th class="gpa-col-suggest gpa-cell-center">${i18n.t("gpaColSuggest")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                  </table>
+                </section>
+              `;
+            })
+            .join("");
+
+          const titleText = i18n
+            .t("gpaCurrentTitle")
+            .replace("{gpa}", currentGpa.toFixed(2))
+            .replace("{credits}", creditLabel);
+
+          body.innerHTML = `
+            <div class="gpa-panel">
+              <div class="gpa-head">
+                <div>
+                  <h3 class="gpa-head-title">${titleText}</h3>
+                  <p class="gpa-head-sub">${statusMsg}</p>
+                </div>
+                <select id="gpa-target">
+                  <option value="excellent" ${selectedTarget === "excellent" ? "selected" : ""}>${i18n.t("gpaTargetExcellent")}</option>
+                  <option value="good" ${selectedTarget === "good" ? "selected" : ""}>${i18n.t("gpaTargetGood")}</option>
+                  <option value="fair" ${selectedTarget === "fair" ? "selected" : ""}>${i18n.t("gpaTargetFair")}</option>
+                </select>
+              </div>
+              ${sectionsHtml}
+            </div>
+          `;
+
+          const selectEl = document.getElementById("gpa-target");
+          if (selectEl) {
+            selectEl.onchange = (e) => renderView(data, e.target.value);
+          }
+        };
+
+        const loadPromise = window.academicAPI?.load?.();
+        const refreshPromise = window.academicAPI?.refresh?.();
+        const delayPromise = new Promise((res) => setTimeout(res, 450));
+
+        const [academic, refreshed] = await Promise.all([loadPromise, refreshPromise]);
+        await delayPromise;
+
+        const data = refreshed?.data || academic;
+        if (!data?.subjects?.length) {
+          createToast(i18n.t("noDataDesc"), { id: "gpa-toast", type: "info", priority: true });
+          await renderView({ subjects: [] });
+          return;
+        }
+
+        await renderView(data, "good");
+      };
+    }
+
+    if (btnLogin) {
+      btnLogin.onclick = async () => {
+        if (state === "ok") {
+          await window.widgetAPI?.logout?.();
+        } else {
+          await window.widgetAPI?.login?.();
+        }
+      };
+    }
+
+    if (btnRefresh) {
+      btnRefresh.onclick = async () => {
+        btnRefresh.disabled = true;
+        hideToast("refresh-success");
+        hideToast("refresh-error");
+        createToast(i18n.t("fetchingWeek"), { id: "refresh-loading", duration: 0, type: "info", priority: true });
+        try {
+          await window.widgetAPI.refresh();
+          hideToast("refresh-loading");
+          createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success", priority: true });
+        } catch (e) {
+          hideToast("refresh-loading");
+          createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error", priority: true });
+        } finally {
+          btnRefresh.disabled = false;
+        }
+      };
+    }
+
     if (btnHide) btnHide.onclick = () => window.widgetAPI.hide();
     if (btnExit) btnExit.onclick = () => window.widgetAPI.quit();
-    if (btnPrevWeek) btnPrevWeek.onclick = async () => {
-      window.loggerAPI?.debug("[btnPrevWeek] Clicked, disabling button");
-      btnPrevWeek.disabled = true;
-      try {
-        await changeWeek(-1);
-      } finally {
-        btnPrevWeek.disabled = false;
-        window.loggerAPI?.debug("[btnPrevWeek] Re-enabled button");
-      }
-    };
-    if (btnNextWeek) btnNextWeek.onclick = async () => {
-      window.loggerAPI?.debug("[btnNextWeek] Clicked, disabling button");
-      btnNextWeek.disabled = true;
-      try {
-        await changeWeek(1);
-      } finally {
-        btnNextWeek.disabled = false;
-        window.loggerAPI?.debug("[btnNextWeek] Re-enabled button");
-      }
-    };
 
-    if (state === "ok") {
-      if (btnLogin) btnLogin.style.display = "none";
-    } else {
+    if (btnPrevWeek) {
+      btnPrevWeek.onclick = async () => {
+        window.loggerAPI?.debug("[btnPrevWeek] Clicked, disabling button");
+        btnPrevWeek.disabled = true;
+        try {
+          await changeWeek(-1);
+        } finally {
+          btnPrevWeek.disabled = false;
+          window.loggerAPI?.debug("[btnPrevWeek] Re-enabled button");
+        }
+      };
+    }
+
+    if (btnNextWeek) {
+      btnNextWeek.onclick = async () => {
+        window.loggerAPI?.debug("[btnNextWeek] Clicked, disabling button");
+        btnNextWeek.disabled = true;
+        try {
+          await changeWeek(1);
+        } finally {
+          btnNextWeek.disabled = false;
+          window.loggerAPI?.debug("[btnNextWeek] Re-enabled button");
+        }
+      };
+    }
+
+    if (state !== "ok") {
       if (btnRefresh) btnRefresh.style.display = "none";
     }
 
@@ -869,19 +1105,14 @@ async function render(isoDate) {
 
     const overlay = document.getElementById("loading-overlay");
     if (overlay) {
-      setTimeout(() => {
-        overlay.style.opacity = "0";
-        setTimeout(() => {
-          overlay.style.display = "none";
-          safeResize();
-        }, 300);
-      }, 500);
+      overlay.style.opacity = "0";
+      overlay.style.display = "none";
+      safeResize();
     }
   } catch (e) {
     el.innerHTML = `<div class="empty">${i18n.t("renderError")} ${e?.message ?? e}</div>`;
   }
 }
-
 
 let weekChangeTimeout = null;
 let isChangingWeek = false;
@@ -908,26 +1139,6 @@ async function changeWeek(offset) {
     if (calendarEl) {
       calendarEl.outerHTML = createSkeletonHTML();
       window.loggerAPI?.debug(`[changeWeek] Skeleton UI injected`);
-    }
-
-    const targetWeek = new Date(currentWeek);
-    targetWeek.setDate(targetWeek.getDate() + (offset * 7));
-    const cacheKey = window.dateAPI.weekKey(targetWeek);
-
-    if (!isOnline) {
-      window.loggerAPI?.warn(`[changeWeek] Offline mode, trying cache for key: ${cacheKey}`);
-      const cachedData = await window.scheduleAPI?.load?.(cacheKey);
-
-      if (cachedData && cachedData.weekStart) {
-        window.loggerAPI?.info(`[changeWeek] Cache HIT, showing cached data`);
-        currentWeek = new Date(cachedData.weekStart);
-        await render(window.dateAPI.weekKey(currentWeek));
-        createToast(i18n.t("offlineMode"), { id: toastId, type: "warning", priority: true });
-      } else {
-        window.loggerAPI?.warn(`[changeWeek] Cache MISS, no data available`);
-        createToast(i18n.t("noDataForWeek"), { id: toastId, type: "error", priority: true });
-      }
-      return;
     }
 
     createToast(i18n.t("fetchingWeek"), { id: toastId, duration: 0, type: "info", priority: true });

@@ -10,7 +10,8 @@ const TRANSLATIONS = {
     week: "Tuần",
     checkUpdate: "Cập nhật",
     login: "Đăng nhập",
-    loginAgain: "Đăng nhập",
+    loginAgain: "Đăng nhập lại",
+    logout: "Đăng xuất",
     refresh: "Làm mới",
     minimize: "Thu nhỏ",
     exit: "Thoát",
@@ -74,6 +75,29 @@ const TRANSLATIONS = {
     updateNewVersion: "Phiên bản mới",
     trayCheckUpdate: "Kiểm tra cập nhật",
     staleDataWarning: "⚠️ Dữ liệu lịch có thể đã cũ. Vui lòng Đăng xuất và Đăng nhập lại để làm mới.",
+    gpaTitle: "GPA tích lũy",
+    gpaCurrentTitle: "GPA hiện tại: {gpa} - {credits}",
+    gpaLoading: "Đang tải dữ liệu học tập...",
+    gpaNoDataTitle: "Không có dữ liệu",
+    gpaNoDataDesc: "Chưa tìm thấy bảng điểm môn học nào.",
+    gpaTargetExcellent: "Xuất sắc (≥ 3.60)",
+    gpaTargetGood: "Giỏi (≥ 3.20)",
+    gpaTargetFair: "Khá (≥ 2.50)",
+    gpaAchieved: "🎉 Đã đạt mục tiêu {target}. Giữ vững phong độ!",
+    gpaImproveNeeded: "💡 Cần cải thiện điểm A cho {count} môn để đạt mục tiêu",
+    gpaColSubject: "Môn học",
+    gpaColCredits: "TC",
+    gpaColLetter: "Điểm chữ",
+    gpaColScore: "Tổng kết",
+    gpaColSuggest: "Gợi ý",
+    gpaSemSummary: "GPA học kỳ: {gpa} • {credits} TC tích lũy",
+    gpaTagNoGpa: "Không tính GPA",
+    gpaTagPending: "Chưa có điểm",
+    gpaTagNeedA: "Cần A",
+    gpaTagPendingLetter: "Chờ điểm",
+    scheduleTab: "Lịch",
+    unknownSemester: "Học kỳ chưa xác định",
+    gpaCreditsUnit: "TC",
   },
   en: {
     title: "UNETI Schedule",
@@ -81,7 +105,8 @@ const TRANSLATIONS = {
     week: "Week",
     checkUpdate: "Update",
     login: "Login",
-    loginAgain: "Login",
+    loginAgain: "Re-login",
+    logout: "Logout",
     refresh: "Refresh",
     minimize: "Minimize",
     exit: "Exit",
@@ -143,6 +168,29 @@ const TRANSLATIONS = {
     updateNewVersion: "New version",
     trayCheckUpdate: "Check for Updates",
     staleDataWarning: "⚠️ Schedule data may be outdated. Please Logout and Login again to refresh.",
+    gpaTitle: "Cumulative GPA",
+    gpaCurrentTitle: "Current GPA: {gpa} - {credits}",
+    gpaLoading: "Loading academic data...",
+    gpaNoDataTitle: "No Data",
+    gpaNoDataDesc: "No academic transcript records found.",
+    gpaTargetExcellent: "Excellent (≥ 3.60)",
+    gpaTargetGood: "Good (≥ 3.20)",
+    gpaTargetFair: "Fair (≥ 2.50)",
+    gpaAchieved: "🎉 Achieved goal {target}. Keep up the great work!",
+    gpaImproveNeeded: "💡 Need to improve to grade A in {count} subjects to hit target",
+    gpaColSubject: "Subject",
+    gpaColCredits: "Credits",
+    gpaColLetter: "Letter Grade",
+    gpaColScore: "Final Score",
+    gpaColSuggest: "Suggestion",
+    gpaSemSummary: "Semester GPA: {gpa} • {credits} Earned Credits",
+    gpaTagNoGpa: "Non-GPA",
+    gpaTagPending: "No Grade Yet",
+    gpaTagNeedA: "Need A",
+    gpaTagPendingLetter: "Pending",
+    scheduleTab: "Schedule",
+    unknownSemester: "Unknown Semester",
+    gpaCreditsUnit: "Credits",
   },
 };
 
@@ -165,10 +213,15 @@ class i18n {
       try {
         localStorage.setItem("app-language", lang);
       } catch { }
-      document.documentElement.lang = lang;
-      window.dispatchEvent(
-        new CustomEvent("languagechange", { detail: { lang } })
-      );
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = lang;
+      }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("languagechange", { detail: { lang } })
+        );
+        window.appAPI?.setLanguage?.(lang);
+      }
     }
   }
 

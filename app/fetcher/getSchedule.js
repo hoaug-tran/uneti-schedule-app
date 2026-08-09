@@ -1,7 +1,8 @@
-import { weekKey } from "../utils/date.js";
+﻿import { weekKey } from "../utils/date.js";
 import * as cheerio from "cheerio";
 import { parseScheduleFromFragment } from "./parseScheduleFromFragment.js";
 import { getCookiePartition } from "./cookieManager.js";
+import { createAuthError, looksLoggedOutHtml } from "./sessionState.js";
 import { postViaWindow } from "./fetchViaWindow.js";
 import {
   saveSchedule,
@@ -54,44 +55,7 @@ function dateToDMY(d) {
 }
 
 function looksLoggedOut(html) {
-  try {
-    if (
-      html.includes("Just a moment") ||
-      html.includes("Performing security verification") ||
-      html.includes("cf-browser-verification") ||
-      html.includes("cf_clearance")
-    ) {
-      return true;
-    }
-
-    const $ = cheerio.load(html);
-    const hasLogout =
-      $('a[href*="DangXuat"]').length > 0 ||
-      $('form[action*="DangXuat"]').length > 0 ||
-      $('a[href*="logout"]').length > 0;
-
-    if (hasLogout) return false;
-
-    const hasOffsets =
-      $("#firstDateOffWeek").length > 0 ||
-      $("#firstDateNextOffWeek").length > 0 ||
-      $("#firstDatePrevOffWeek").length > 0;
-    if (hasOffsets) return false;
-
-    const hasScheduleTable =
-      $("table.fl-table").length > 0 ||
-      $("thead th").length > 0 ||
-      $("div.content").length > 0;
-    if (hasScheduleTable) return false;
-
-    const hasLoginForm =
-      $('form[action*="dang-nhap"], form[action*="DangNhap"]').length > 0 &&
-      $('input[type="password"]').length > 0;
-
-    return hasLoginForm;
-  } catch {
-    return false;
-  }
+  return looksLoggedOutHtml(html);
 }
 
 
@@ -136,38 +100,7 @@ function extractOffsets(html) {
 }
 
 async function refreshSession() {
-  try {
-    logger.info("[refreshSession] Attempting to refresh server session");
-
-    const now = new Date();
-    const currentDate = dateToDMY(now);
-
-    const res = await withTimeout(
-      sessionFetch(CONFIG.UNETI_SCHEDULE_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "X-Requested-With": "XMLHttpRequest",
-          "Referer": "https://sinhvien.uneti.edu.vn/lich-theo-tuan.html",
-          "Origin": "https://sinhvien.uneti.edu.vn",
-        },
-        body: `pNgayHienTai=${encodeURIComponent(currentDate)}&pLoaiLich=0`,
-      }),
-      CONFIG.HTTP_TIMEOUT_MS,
-      "session-refresh"
-    );
-
-    if (res.ok) {
-      logger.info(`[refreshSession] Session refreshed successfully with date: ${currentDate}`);
-      return true;
-    } else {
-      logger.warn(`[refreshSession] Failed with status ${res.status}`);
-      return false;
-    }
-  } catch (err) {
-    logger.warn(`[refreshSession] Error: ${err?.message}`);
-    return false;
-  }
+  return false;
 }
 
 function validateOffsets(offsets, allowStale = false) {
@@ -267,7 +200,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
     const cookies = await ses.cookies.get({ domain: CONFIG.UNETI_DOMAIN });
     hasSessCookie = cookies && cookies.length > 0;
   } catch { }
-  if (!hasSessCookie) throw new Error("No cookies");
+  if (!hasSessCookie) throw createAuthError("No cookies");
 
   let target;
 
@@ -284,7 +217,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
         `week:${target}`
       );
       logger.debug(`[getSchedule] fragment length: ${fragment.length}`);
-      if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
+      if (looksLoggedOut(fragment)) throw createAuthError("Cookie expired");
       lastOffsets = extractOffsets(fragment);
       const validation = validateOffsets(lastOffsets);
 
@@ -302,19 +235,19 @@ export async function getSchedule(offset = 0, baseDate = null) {
             `week:${target}-retry`
           );
 
-          if (looksLoggedOut(retryFragment)) throw new Error("Cookie expired");
+          if (looksLoggedOut(retryFragment)) throw createAuthError("Cookie expired");
           lastOffsets = extractOffsets(retryFragment);
 
           if (!validateOffsets(lastOffsets, true)) {
             logger.error("[getSchedule] baseDate: Still stale after refresh");
-            throw new Error("Cookie expired or stale session");
+            throw createAuthError("Cookie expired or stale session");
           }
 
           if (!lastOffsets.current) lastOffsets.current = target;
           logger.debug("[getSchedule] baseDate: offsets after retry:", lastOffsets);
           return await processFragment(retryFragment, target, lastOffsets);
         } else if (validation === false) {
-          throw new Error("Cookie expired or stale session");
+          throw createAuthError("Cookie expired or stale session");
         }
       }
 
@@ -333,7 +266,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
       "week:current"
     );
     logger.debug(`[getSchedule] fragment length: ${fragment.length}`);
-    if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
+    if (looksLoggedOut(fragment)) throw createAuthError("Cookie expired");
 
     lastOffsets = extractOffsets(fragment);
     const validation = validateOffsets(lastOffsets);
@@ -352,7 +285,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
           "week:current-retry"
         );
 
-        if (looksLoggedOut(retryFragment)) throw new Error("Cookie expired");
+        if (looksLoggedOut(retryFragment)) throw createAuthError("Cookie expired");
 
         lastOffsets = extractOffsets(retryFragment);
         const retryValidation = validateOffsets(lastOffsets, true);
@@ -381,7 +314,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
       } else {
         logger.warn("[getSchedule] Session refresh failed");
         if (validation === false) {
-          throw new Error("Cookie expired or stale session");
+          throw createAuthError("Cookie expired or stale session");
         }
       }
     }
@@ -427,7 +360,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
     `week:${target}`
   );
   logger.debug(`[getSchedule] fetched new fragment length: ${fragment.length}`);
-  if (looksLoggedOut(fragment)) throw new Error("Cookie expired");
+  if (looksLoggedOut(fragment)) throw createAuthError("Cookie expired");
 
   lastOffsets = extractOffsets(fragment);
   const validation = validateOffsets(lastOffsets);
@@ -446,19 +379,19 @@ export async function getSchedule(offset = 0, baseDate = null) {
         `week:${target}-retry`
       );
 
-      if (looksLoggedOut(retryFragment)) throw new Error("Cookie expired");
+      if (looksLoggedOut(retryFragment)) throw createAuthError("Cookie expired");
       lastOffsets = extractOffsets(retryFragment);
 
       if (!validateOffsets(lastOffsets, true)) {
         logger.error("[getSchedule] offset: Still stale after refresh");
-        throw new Error("Cookie expired or stale session");
+        throw createAuthError("Cookie expired or stale session");
       }
 
       if (!lastOffsets.current) lastOffsets.current = target;
       logger.debug("[getSchedule] offset: offsets after retry:", lastOffsets);
       return await processFragment(retryFragment, target, lastOffsets);
     } else if (validation === false) {
-      throw new Error("Cookie expired or stale session");
+      throw createAuthError("Cookie expired or stale session");
     }
   }
 
@@ -468,3 +401,5 @@ export async function getSchedule(offset = 0, baseDate = null) {
 
   return await processFragment(fragment, target, lastOffsets);
 }
+
+

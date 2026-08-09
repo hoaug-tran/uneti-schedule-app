@@ -39,7 +39,9 @@ async function saveSchedulesToDisk(schedules) {
     const storeDir = getStoreDir();
     await fs.mkdir(storeDir, { recursive: true });
     const filePath = await getSchedulesPath();
-    await fs.writeFile(filePath, JSON.stringify(schedules, null, 2), "utf8");
+    const tmp = `${filePath}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(schedules, null, 2), "utf8");
+    await fs.rename(tmp, filePath);
   } catch (err) {
     console.warn("[scheduleDb] save failed:", err?.message);
   }
@@ -68,3 +70,4 @@ export async function deleteAllSchedules() {
 
 export function closeDatabase() {
 }
+
