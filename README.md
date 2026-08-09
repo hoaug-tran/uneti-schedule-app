@@ -29,13 +29,14 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 
 ## Tính năng chính
 
-- Hiển thị lịch học theo tuần
-- Tự động làm mới: tuần hiện tại mỗi 1 giờ, tuần sau mỗi 6 giờ
-- Hoạt động offline (dùng lịch đã lưu)
-- Dark/Light theme
-- Tiếng Việt/English
-- Tray icon để truy cập nhanh
-- Tự động kiểm tra cập nhật mỗi 6 giờ
+- **Hiển thị lịch học theo tuần**: Giao diện trực quan, dễ theo dõi.
+- **Tính toán & Lập kế hoạch GPA (GPA Planner)**: Tự động nạp bảng điểm, tính GPA hệ 4 & hệ 10 chuẩn UNETI, tự phân loại các môn không tính GPA (`Non-GPA`) và tự đưa ra gợi ý cải thiện điểm số để đạt mục tiêu (Xuất sắc, Giỏi, Khá).
+- **Tự động làm mới**: Tuần hiện tại mỗi 1 giờ, tuần sau mỗi 6 giờ.
+- **Hoạt động offline**: Sử dụng lịch đã lưu ngay cả khi mất mạng.
+- **Giao diện & Chủ đề**: Hỗ trợ Chế độ Sáng/Tối (Dark/Light Theme) dịu mắt.
+- **Đa ngôn ngữ (i18n)**: Hỗ trợ song ngữ Tiếng Việt/English cho toàn bộ giao diện và đồng bộ cả Menu chuột phải khay hệ thống (System Tray).
+- **Tray Icon**: Truy cập nhanh dưới góc màn hình.
+- **Tự động kiểm tra cập nhật**: Thông báo tự động khi có phiên bản mới.
 
 ## Cài đặt
 
@@ -104,6 +105,13 @@ Mở ứng dụng lần đầu sẽ hiện cửa sổ đăng nhập. Nhập tài
 ### Xem lịch
 
 Sau khi đăng nhập, lịch sẽ tự động hiển thị. Dùng nút "← Trước" và "Sau →" để chuyển tuần.
+
+### Xem & Lập kế hoạch GPA (GPA Planner)
+
+1. Click vào nút **GPA** trên thanh điều khiển của ứng dụng.
+2. Hệ thống sẽ tự động nạp kết quả học tập chính thức từ trang sinh viên UNETI và tính toán **GPA Hệ 4** & **GPA Hệ 10** (theo kỳ và toàn khóa).
+3. Chọn mục tiêu xếp loại mong muốn (như **Xuất sắc $\ge 3.60$**, **Giỏi $\ge 3.20$**, **Khá $\ge 2.50$**). Hệ thống sẽ phân tích và đưa ra gợi ý thông minh (ví dụ: *Cần cải thiện lên điểm A cho 2 môn để đạt mục tiêu*).
+4. Các môn không tính GPA (như Thể dục, Quốc phòng, kiểm tra Tiếng Anh đầu vào TOEIC...) được nhận diện và phân loại nhãn `Non-GPA` rõ ràng.
 
 ### Làm mới lịch
 
