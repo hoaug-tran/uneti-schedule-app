@@ -1,12 +1,11 @@
 {
   "name": "uneti-schedule-widget",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Widget lịch học UNETI",
   "author": "Trần Kính Hoàng (hoaug)",
   "type": "module",
   "main": "main/main.js",
   "scripts": {
-    "login": "node app/fetcher/loginAndSaveCookies.js",
     "fetch": "node app/fetcher/getSchedule.js",
     "dev": "cross-env NODE_ENV=development electron main/main.js",
     "build": "electron-builder",
