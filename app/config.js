@@ -25,6 +25,8 @@ export const CONFIG = {
   UNETI_EXAM_ENDPOINT: "https://apiv3.uneti.edu.vn/api/SP_TC_SV_KetQuaHocTap_TiepNhan/EDU_Load_Para_MaSinhVien_LichThiSinhVien",
   UNETI_GRADES_ENDPOINT: "https://apiv3.uneti.edu.vn/api/SP_TC_SV_KetQuaHocTap_TiepNhan/EDU_Load_Para_MaSinhVien_ChiTiet",
   UNETI_GPA_ENDPOINT: "https://apiv3.uneti.edu.vn/api/SP_TC_SV_KetQuaHocTap_TiepNhan/EDU_Load_Para_MaSinhVien_DiemTrungBinhHocKy",
+  UNETI_CURRICULUM_ENDPOINT: "https://apiv3.uneti.edu.vn/api/SP_TC_SV_KetQuaHocTap_TiepNhan/ChuongTrinhKhung_Load_ByMaSinhVien",
+  UNETI_MAJOR_CURRICULUM_ENDPOINT: "https://apiv3.uneti.edu.vn/api/SP_MC_DT_ChuyenNganh/ChuongTrinhKhung_Load_ByKhoaNganh",
   COOKIE_KEYTAR_SERVICE: "uneti-schedule-app",
   COOKIE_KEYTAR_ACCOUNT: "cookies",
   DB_FILENAME: "schedule.db",

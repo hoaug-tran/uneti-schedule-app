@@ -38,7 +38,7 @@ import { closeDatabase, loadScheduleAsync } from "../app/fetcher/scheduleDb.js";
 import { isAuthError } from "../app/fetcher/sessionState.js";
 import { getAcademicResults } from "../app/fetcher/getAcademicResults.js";
 import { loadAcademicResults } from "../app/fetcher/academicDb.js";
-import { planGpa } from "../app/utils/gpa.js";
+import { planGpa, simulateGpa } from "../app/utils/gpa.js";
 import { weekKey } from "../app/utils/date.js";
 import { i18nInstance as i18n } from "../app/utils/i18n.js";
 
@@ -150,6 +150,18 @@ ipcMain.handle("gpa:plan", async (_, target) => {
     return { ok: true, data: planGpa(data.subjects, target) };
   } catch (err) {
     logger.warn(`[gpa:plan] fail: ${err?.message}`);
+    return { ok: false, error: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle("gpa:simulate", async (_, overrides) => {
+  try {
+    const data = await loadAcademicResults();
+    if (!data?.subjects?.length) return { ok: false, error: "No academic results" };
+    if (!overrides || Array.isArray(overrides) || typeof overrides !== "object") return { ok: false, error: "Invalid GPA overrides" };
+    return { ok: true, data: simulateGpa(data.subjects, overrides) };
+  } catch (err) {
+    logger.warn(`[gpa:simulate] fail: ${err?.message}`);
     return { ok: false, error: err?.message || String(err) };
   }
 });

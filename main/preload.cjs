@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld("academicAPI", {
   load: () => ipcRenderer.invoke("academic:load-file"),
   refresh: () => ipcRenderer.invoke("academic:refresh"),
   plan: (target) => ipcRenderer.invoke("gpa:plan", target),
+  simulate: (overrides) => ipcRenderer.invoke("gpa:simulate", overrides),
 });
 
 contextBridge.exposeInMainWorld("dateAPI", {
