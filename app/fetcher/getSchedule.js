@@ -1,51 +1,16 @@
-﻿import { weekKey } from "../utils/date.js";
-import * as cheerio from "cheerio";
-import { parseScheduleFromFragment } from "./parseScheduleFromFragment.js";
-import { getCookiePartition } from "./cookieManager.js";
-import { createAuthError, looksLoggedOutHtml } from "./sessionState.js";
-import { postViaWindow } from "./fetchViaWindow.js";
+import { weekKey, startOfWeek, formatYMDLocal, parseYMDLocal } from "../utils/date.js";
+import { callSupportApi } from "./supportApi.js";
+import { getStudentId } from "./userStore.js";
+import { createAuthError, isAuthError } from "./sessionState.js";
 import {
-  saveSchedule,
+  saveAllSchedules,
   loadScheduleAsync,
   deleteAllSchedules,
 } from "./scheduleDb.js";
 import { CONFIG } from "../config.js";
 import { logger } from "../utils/logger.js";
 
-let lastOffsets = null;
-
-function withTimeout(promise, ms = CONFIG.HTTP_TIMEOUT_MS, label = "request") {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(
-      () => reject(new Error(`${label} timed out after ${ms}ms`)),
-      ms
-    );
-    promise.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      }
-    );
-  });
-}
-
-async function postWeek(_unused, body, label) {
-  return withTimeout(
-    postViaWindow(body, label),
-    CONFIG.HTTP_TIMEOUT_MS,
-    label
-  );
-}
-
-
-function dmyToDate(s) {
-  const [dd, mm, yyyy] = s.split("/").map((n) => parseInt(n, 10));
-  return new Date(yyyy, mm - 1, dd);
-}
+const inFlightRequests = new Map();
 
 function dateToDMY(d) {
   const dd = String(d.getDate()).padStart(2, "0");
@@ -54,352 +19,195 @@ function dateToDMY(d) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-function looksLoggedOut(html) {
-  return looksLoggedOutHtml(html);
-}
-
-
-function extractOffsets(html) {
-  const $ = cheerio.load(html);
-  let prev =
-    $("#firstDatePrevOffWeek").val() ||
-    $('input[name="firstDatePrevOffWeek"]').val() ||
-    null;
-  let current =
-    $("#firstDateOffWeek").val() ||
-    $('input[name="firstDateOffWeek"]').val() ||
-    null;
-  let next =
-    $("#firstDateNextOffWeek").val() ||
-    $('input[name="firstDateNextOffWeek"]').val() ||
-    null;
-  if (current) return { prev, current, next };
-
-  const m = html.match(/(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/);
-  if (m) {
-    const cur = m[1];
-    const d = dmyToDate(cur);
-    const p = new Date(d);
-    p.setDate(p.getDate() - 7);
-    const n = new Date(d);
-    n.setDate(n.getDate() + 7);
-    return { prev: dateToDMY(p), current: cur, next: dateToDMY(n) };
-  }
-
-  const any = html.match(/(\d{2}\/\d{2}\/\d{4})/);
-  if (any) {
-    const cur = any[1];
-    const d = dmyToDate(cur);
-    const p = new Date(d);
-    p.setDate(p.getDate() - 7);
-    const n = new Date(d);
-    n.setDate(n.getDate() + 7);
-    return { prev: dateToDMY(p), current: cur, next: dateToDMY(n) };
-  }
-  return { prev: null, current: null, next: null };
-}
-
-async function refreshSession() {
-  return false;
-}
-
-function validateOffsets(offsets, allowStale = false) {
-  if (!offsets?.current) return true;
-
-  try {
-    const currentWeek = dmyToDate(offsets.current);
-    const now = new Date();
-    const diffMs = Math.abs(now - currentWeek);
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-    const MAX_STALE_DAYS = 180;
-    const WARN_STALE_DAYS = 120;
-    const REFRESH_THRESHOLD_DAYS = 60;
-
-    if (diffDays > MAX_STALE_DAYS) {
-      logger.warn(`[validateOffsets] Server returned stale week: ${offsets.current} (${Math.round(diffDays)} days old)`);
-
-      if (allowStale) {
-        logger.info(`[validateOffsets] Allowing stale data due to allowStale flag`);
-        return true;
-      }
-
-      logger.error(`[validateOffsets] Data too stale (>${MAX_STALE_DAYS} days), refresh won't help - need re-login`);
-      return false;
-    }
-
-    if (diffDays > WARN_STALE_DAYS) {
-      logger.warn(`[validateOffsets] Week data is ${Math.round(diffDays)} days old - session likely expired, will force logout`);
-      return "stale";
-    }
-
-    if (diffDays > REFRESH_THRESHOLD_DAYS) {
-      logger.warn(`[validateOffsets] Week data is ${Math.round(diffDays)} days old (will attempt refresh)`);
-      return "stale";
-    }
-
-    if (diffDays > 30) {
-      logger.info(`[validateOffsets] Week data is ${Math.round(diffDays)} days old (still valid)`);
-    }
-
-    return true;
-  } catch (err) {
-    logger.warn(`[validateOffsets] Failed to validate: ${err?.message}`);
-    return true;
-  }
-}
-
 export async function clearAllSchedules() {
   try {
-    deleteAllSchedules();
+    await deleteAllSchedules();
     logger.info("[clearAllSchedules] removed all schedules");
   } catch (err) {
     logger.warn("[clearAllSchedules] fail:", err?.message);
   }
 }
 
-async function loadOffsetsFromDb(baseDate = new Date()) {
-  try {
-    const key = weekKey(baseDate);
-    const data = await loadScheduleAsync(key);
-    return data?.offsets || null;
-  } catch (err) {
-    logger.warn("[loadOffsetsFromDb] fail:", err?.message);
-    return null;
+function mapClassItem(item) {
+  const day = (item.NgayBatDau || "").slice(0, 10);
+  const periods = [];
+  const from = item.TuTiet || 0;
+  const to = item.DenTiet || from;
+  for (let p = from; p <= to; p++) periods.push(p);
+
+  let type = "LT";
+  const nameLower = (item.TenMonHoc || "").toLowerCase();
+  const roomLower = (item.TenPhong || "").toLowerCase();
+  if (nameLower.includes("thực hành") || roomLower.includes("th") || roomLower.includes("lab")) {
+    type = "TH";
+  } else if (roomLower.includes("online") || roomLower.includes("zoom") || roomLower.includes("meet")) {
+    type = "Online";
   }
+
+  const room = (item.TenPhong || "").replace(/^Phòng học\//i, "").trim();
+
+  return {
+    day,
+    session: item.CaHoc || "Sáng",
+    subject: item.TenMonHoc || "",
+    classInfo: [item.TenLopHoc, item.MaLopHocPhan].filter(Boolean).join(" - "),
+    periods,
+    room,
+    teacher: item.TenGiangVien || "",
+    type,
+    raw: item,
+  };
 }
 
-async function processFragment(fragment, target, offsets) {
-  const data = parseScheduleFromFragment(fragment) || [];
-  logger.debug(`[processFragment] parsed data length: ${data.length}`);
+function mapExamItem(item) {
+  const day = (item.TC_SV_KetQuaHocTap_LichThiSinhVien_NgayThi || "").slice(0, 10);
+  const from = item.TC_SV_KetQuaHocTap_LichThiSinhVien_TuTiet || 0;
+  const to = item.TC_SV_KetQuaHocTap_LichThiSinhVien_DenTiet || from;
+  const periods = [];
+  for (let p = from; p <= to; p++) periods.push(p);
 
-  if (data.length > 0) {
-    const subjects = [...new Set(data.map(d => d.subject))].join(", ");
-    const dayCount = [...new Set(data.map(d => d.day))].length;
-    logger.info(`[processFragment] Week ${target}: ${data.length} classes, ${dayCount} days, subjects: ${subjects}`);
-  } else {
-    logger.info(`[processFragment] Week ${target}: No classes (empty week)`);
-  }
+  const room = (item.TC_SV_KetQuaHocTap_LichThiSinhVien_TenPhong || "").replace(/^Phòng học\//i, "").trim();
+  const loaiThi = item.TC_SV_KetQuaHocTap_LichThiSinhVien_LoaiThi || "Thi";
 
-  const weekStart = dmyToDate(target);
-  const key = weekKey(weekStart);
+  return {
+    day,
+    session: item.TC_SV_KetQuaHocTap_LichThiSinhVien_CaThi || "Sáng",
+    subject: item.TC_SV_KetQuaHocTap_LichThiSinhVien_TenMonHoc || "",
+    classInfo: [item.TC_SV_KetQuaHocTap_LichThiSinhVien_MaLopHocPhan, loaiThi].filter(Boolean).join(" - "),
+    periods,
+    room,
+    teacher: "",
+    type: "Thi",
+    raw: item,
+  };
+}
 
-  await saveSchedule(key, weekStart.toISOString(), data, offsets);
-  logger.debug(`[processFragment] saved to database: ${key}`);
+function createOffsetsForDate(weekMonday) {
+  const prevD = new Date(weekMonday);
+  prevD.setDate(prevD.getDate() - 7);
+  const nextD = new Date(weekMonday);
+  nextD.setDate(nextD.getDate() + 7);
 
-  return { offsets, weekStart, data };
+  return {
+    prev: dateToDMY(prevD),
+    current: dateToDMY(weekMonday),
+    next: dateToDMY(nextD),
+  };
 }
 
 export async function getSchedule(offset = 0, baseDate = null) {
-  logger.debug(`[getSchedule] start offset: ${offset} baseDate: ${baseDate}`);
+  const reqKey = `${offset}:${baseDate || "current"}`;
+  if (inFlightRequests.has(reqKey)) {
+    return inFlightRequests.get(reqKey);
+  }
 
-  let hasSessCookie = false;
+  const p = executeGetSchedule(offset, baseDate);
+  inFlightRequests.set(reqKey, p);
   try {
-    const { session } = await import("electron");
-    const ses = session.fromPartition(getCookiePartition());
-    const cookies = await ses.cookies.get({ domain: CONFIG.UNETI_DOMAIN });
-    hasSessCookie = cookies && cookies.length > 0;
-  } catch { }
-  if (!hasSessCookie) throw createAuthError("No cookies");
-
-  let target;
-
-  if (baseDate) {
-    const d = new Date(baseDate);
-    if (Number.isFinite(d.getTime())) {
-      target = `${String(d.getDate()).padStart(2, "0")}/${String(
-        d.getMonth() + 1
-      ).padStart(2, "0")}/${d.getFullYear()}`;
-      logger.debug(`[getSchedule] using baseDate as target: ${target}`);
-      const fragment = await postWeek(
-        null,
-        `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
-        `week:${target}`
-      );
-      logger.debug(`[getSchedule] fragment length: ${fragment.length}`);
-      if (looksLoggedOut(fragment)) throw createAuthError("Cookie expired");
-      lastOffsets = extractOffsets(fragment);
-      const validation = validateOffsets(lastOffsets);
-
-      if (validation === "stale" || validation === false) {
-        logger.warn("[getSchedule] baseDate: Detected stale data, attempting session refresh");
-        const refreshed = await refreshSession();
-
-        if (refreshed) {
-          logger.info("[getSchedule] baseDate: Session refreshed, retrying");
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          const retryFragment = await postWeek(
-            null,
-            `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
-            `week:${target}-retry`
-          );
-
-          if (looksLoggedOut(retryFragment)) throw createAuthError("Cookie expired");
-          lastOffsets = extractOffsets(retryFragment);
-
-          if (!validateOffsets(lastOffsets, true)) {
-            logger.error("[getSchedule] baseDate: Still stale after refresh");
-            throw createAuthError("Cookie expired or stale session");
-          }
-
-          if (!lastOffsets.current) lastOffsets.current = target;
-          logger.debug("[getSchedule] baseDate: offsets after retry:", lastOffsets);
-          return await processFragment(retryFragment, target, lastOffsets);
-        } else if (validation === false) {
-          throw createAuthError("Cookie expired or stale session");
-        }
-      }
-
-      if (!lastOffsets.current) lastOffsets.current = target;
-      logger.debug("[getSchedule] offsets:", lastOffsets);
-      return await processFragment(fragment, target, lastOffsets);
-    } else {
-      logger.warn("[getSchedule] baseDate invalid, fallback to offset logic");
-    }
+    return await p;
+  } finally {
+    inFlightRequests.delete(reqKey);
   }
-
-  if (offset === 0) {
-    const fragment = await postWeek(
-      null,
-      "pNgayHienTai=&pLoaiLich=0",
-      "week:current"
-    );
-    logger.debug(`[getSchedule] fragment length: ${fragment.length}`);
-    if (looksLoggedOut(fragment)) throw createAuthError("Cookie expired");
-
-    lastOffsets = extractOffsets(fragment);
-    const validation = validateOffsets(lastOffsets);
-
-    if (validation === "stale" || validation === false) {
-      logger.warn("[getSchedule] Detected stale data, attempting session refresh");
-      const refreshed = await refreshSession();
-
-      if (refreshed) {
-        logger.info("[getSchedule] Session refreshed, retrying fetch");
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        const retryFragment = await postWeek(
-          null,
-          "pNgayHienTai=&pLoaiLich=0",
-          "week:current-retry"
-        );
-
-        if (looksLoggedOut(retryFragment)) throw createAuthError("Cookie expired");
-
-        lastOffsets = extractOffsets(retryFragment);
-        const retryValidation = validateOffsets(lastOffsets, true);
-
-        const isStillStale = retryValidation === "stale" || retryValidation === false;
-
-        if (isStillStale) {
-          logger.warn("[getSchedule] Data still stale after refresh - server session locked to old data");
-        }
-
-        target = lastOffsets.current;
-        if (!target) {
-          logger.warn(`[getSchedule] target invalid after retry: ${target}`);
-          return null;
-        }
-
-        const result = await processFragment(retryFragment, target, lastOffsets);
-
-        if (isStillStale && result) {
-          result.staleWarning = true;
-          result.staleMessage = "staleDataWarning";
-          logger.warn("[getSchedule] Returning stale data with warning");
-        }
-
-        return result;
-      } else {
-        logger.warn("[getSchedule] Session refresh failed");
-        if (validation === false) {
-          throw createAuthError("Cookie expired or stale session");
-        }
-      }
-    }
-
-    logger.debug("getSchedule] offsets:", lastOffsets);
-
-    target = lastOffsets.current;
-    if (!target) {
-      logger.warn(`[getSchedule] target invalid: ${target}`);
-      return null;
-    }
-
-    return await processFragment(fragment, target, lastOffsets);
-  }
-
-  if (!baseDate) {
-    if (!lastOffsets) {
-      lastOffsets = await loadOffsetsFromDb(new Date());
-      if (!lastOffsets) {
-        logger.warn("[getSchedule] no lastOffsets, fallback to current week");
-        return await getSchedule(0);
-      }
-    }
-    if (offset === -1) target = lastOffsets?.prev;
-    if (offset === 1) target = lastOffsets?.next;
-  } else {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + offset * 7);
-    target = `${String(d.getDate()).padStart(2, "0")}/${String(
-      d.getMonth() + 1
-    ).padStart(2, "0")}/${d.getFullYear()}`;
-    logger.debug(`[getSchedule] calculated target from baseDate: ${target}`);
-  }
-
-  if (!target) {
-    logger.warn("[getSchedule] no target week");
-    return null;
-  }
-
-  const fragment = await postWeek(
-    null,
-    `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
-    `week:${target}`
-  );
-  logger.debug(`[getSchedule] fetched new fragment length: ${fragment.length}`);
-  if (looksLoggedOut(fragment)) throw createAuthError("Cookie expired");
-
-  lastOffsets = extractOffsets(fragment);
-  const validation = validateOffsets(lastOffsets);
-
-  if (validation === "stale" || validation === false) {
-    logger.warn("[getSchedule] offset: Detected stale data, attempting session refresh");
-    const refreshed = await refreshSession();
-
-    if (refreshed) {
-      logger.info("[getSchedule] offset: Session refreshed, retrying");
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const retryFragment = await postWeek(
-        null,
-        `pNgayHienTai=${encodeURIComponent(target)}&pLoaiLich=0`,
-        `week:${target}-retry`
-      );
-
-      if (looksLoggedOut(retryFragment)) throw createAuthError("Cookie expired");
-      lastOffsets = extractOffsets(retryFragment);
-
-      if (!validateOffsets(lastOffsets, true)) {
-        logger.error("[getSchedule] offset: Still stale after refresh");
-        throw createAuthError("Cookie expired or stale session");
-      }
-
-      if (!lastOffsets.current) lastOffsets.current = target;
-      logger.debug("[getSchedule] offset: offsets after retry:", lastOffsets);
-      return await processFragment(retryFragment, target, lastOffsets);
-    } else if (validation === false) {
-      throw createAuthError("Cookie expired or stale session");
-    }
-  }
-
-  if (!lastOffsets.current) lastOffsets.current = target;
-
-  logger.debug("[getSchedule] new offsets:", lastOffsets);
-
-  return await processFragment(fragment, target, lastOffsets);
 }
 
+async function executeGetSchedule(offset = 0, baseDate = null) {
+  logger.debug(`[getSchedule] start offset: ${offset} baseDate: ${baseDate}`);
 
+  let targetDate;
+  if (baseDate) {
+    const d = new Date(baseDate);
+    d.setDate(d.getDate() + offset * 7);
+    targetDate = startOfWeek(d);
+  } else {
+    const d = new Date();
+    d.setDate(d.getDate() + offset * 7);
+    targetDate = startOfWeek(d);
+  }
+
+  const requestedKey = formatYMDLocal(targetDate);
+  const cached = await loadScheduleAsync(requestedKey);
+
+  const studentId = await getStudentId();
+  if (!studentId) {
+    if (cached) return { offsets: cached.offsets, weekStart: targetDate, data: cached.data };
+    throw createAuthError("No student logged in. Please log in first.");
+  }
+
+  const scheduleUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?TC_SV_KetQuaHocTap_MaSinhVien=${encodeURIComponent(studentId)}`;
+  const examUrl = `${CONFIG.UNETI_EXAM_ENDPOINT}?TC_SV_KetQuaHocTap_MaSinhVien=${encodeURIComponent(studentId)}`;
+
+  try {
+    const [schedJson, examJson] = await Promise.all([
+      callSupportApi({
+        endpoint: scheduleUrl,
+        method: "GET",
+        label: "schedule-classes",
+      }),
+      callSupportApi({
+        endpoint: examUrl,
+        method: "GET",
+        label: "schedule-exams",
+      }),
+    ]);
+
+    const schedItems = schedJson?.body || [];
+    const examItems = examJson?.body || [];
+
+    const mappedClasses = schedItems.map(mapClassItem).filter((c) => !!c.day);
+    const mappedExams = examItems.map(mapExamItem).filter((c) => !!c.day);
+    const allItems = [...mappedClasses, ...mappedExams];
+
+    const weeksMap = new Map();
+    for (const item of allItems) {
+      const itemDate = new Date(`${item.day}T00:00:00`);
+      const wKey = weekKey(itemDate);
+      if (!weeksMap.has(wKey)) weeksMap.set(wKey, []);
+      weeksMap.get(wKey).push(item);
+    }
+
+    const batch = {};
+    for (const [wKey, items] of weeksMap.entries()) {
+      const monday = parseYMDLocal(wKey);
+      const offsets = createOffsetsForDate(monday);
+      batch[wKey] = {
+        week_start: monday.toISOString(),
+        data: items,
+        offsets,
+        updated_at: Date.now(),
+      };
+    }
+
+    const requestedOffsets = createOffsetsForDate(targetDate);
+    const requestedData = weeksMap.get(requestedKey) || [];
+
+    if (!batch[requestedKey]) {
+      batch[requestedKey] = {
+        week_start: targetDate.toISOString(),
+        data: requestedData,
+        offsets: requestedOffsets,
+        updated_at: Date.now(),
+      };
+    }
+
+    await saveAllSchedules(batch);
+
+    return {
+      offsets: requestedOffsets,
+      weekStart: targetDate,
+      data: requestedData,
+    };
+  } catch (err) {
+    if (isAuthError(err)) {
+      if (cached) {
+        logger.warn(`[getSchedule] Auth error, returning cached schedule with authError flag for ${requestedKey}`);
+        return { offsets: cached.offsets, weekStart: targetDate, data: cached.data, authError: true };
+      }
+      throw err;
+    }
+    if (cached) {
+      logger.info(`[getSchedule] API error, using cached schedule for ${requestedKey}`);
+      return { offsets: cached.offsets, weekStart: targetDate, data: cached.data };
+    }
+    throw err;
+  }
+}

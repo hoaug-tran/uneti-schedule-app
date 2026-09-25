@@ -169,13 +169,16 @@ ipcMain.handle("widget:refresh", async () => {
 
     logger.info("[widget:refresh] Cookies valid, refreshing schedule");
 
-    await getSchedule(0);
-    await getSchedule(1);
+    const res0 = await getSchedule(0);
+    const res1 = await getSchedule(1);
+    if (res0?.authError || res1?.authError) {
+      await requireLogin("Refresh detected expired session");
+      return;
+    }
 
     win?.webContents.send("reload");
   } catch (err) {
     logger.warn(`[widget:refresh] fail: ${err?.message}`);
-    const msg = String(err || "");
     if (isAuthError(err)) {
       await requireLogin(err?.message);
     } else {
@@ -196,11 +199,7 @@ ipcMain.handle("widget:login", async () => {
     logger.debug("[IPC] widget:login START");
     await showLoginWindow(win);
     logger.debug("[IPC] widget:login window closed, cookies saved");
-    startCookieRefreshService();
-
-    logger.debug("[IPC] widget:login sending login-success event");
-    win?.webContents.send("login-success");
-    win?.webContents.send("status", "Login success, loading schedule...");
+    startCookieRefreshService(() => requireLogin("Session expired in background refresh"));
 
     logger.debug("[IPC] widget:login clearing schedules");
     await clearAllSchedules();
@@ -217,9 +216,9 @@ ipcMain.handle("widget:login", async () => {
       );
     }
 
-    logger.debug("[IPC] widget:login sending status ready + reload");
+    logger.debug("[IPC] widget:login sending status ready and login-success");
     win?.webContents.send("status", "Schedule ready");
-    win?.webContents.send("reload");
+    win?.webContents.send("login-success");
 
     if (win && !win.isDestroyed()) {
       win.show();
@@ -235,9 +234,14 @@ ipcMain.handle("widget:login", async () => {
 ipcMain.handle("widget:logout", async () => {
   try {
     logger.info("[IPC] widget:logout START");
+    stopCookieRefreshService();
     const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
+    const { clearUser } = await import("../app/fetcher/userStore.js");
+    const { clearAcademicResults } = await import("../app/fetcher/academicDb.js");
     await clearAllCookies();
     await clearAllSchedules();
+    await clearUser();
+    await clearAcademicResults();
     logger.info("[IPC] User logged out successfully");
     win?.webContents.send("reload");
     return { success: true };
@@ -392,10 +396,12 @@ ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
       }
     }
     const data = await getSchedule(offset, adjustedIso);
+    if (data?.authError) {
+      requireLogin("Session expired during week fetch");
+    }
     return data;
   } catch (err) {
     logger.warn(`fetch-week error: ${err?.message}`);
-    const msg = err?.message || String(err);
     if (isAuthError(err)) {
       await requireLogin(err?.message);
     }
@@ -725,10 +731,16 @@ app.whenReady().then(async () => {
   const hasCookie = await hasCookies();
   if (hasCookie) {
     logger.info("[main] Cookies found, fetching schedule");
-    startCookieRefreshService();
+    startCookieRefreshService(() => requireLogin("Session expired in background refresh"));
     try {
       const result0 = await getSchedule(0);
       const result1 = await getSchedule(1);
+
+      if (result0?.authError || result1?.authError) {
+        logger.warn("[main] Auth error detected on startup, requiring re-login");
+        await requireLogin("Startup session expired");
+        return;
+      }
 
       if (result0?.staleWarning || result1?.staleWarning) {
         const i18nKey = result0?.staleMessage || result1?.staleMessage || "staleDataWarning";
@@ -751,11 +763,9 @@ app.whenReady().then(async () => {
       const errMsg = err?.message || String(err);
       logger.warn(`[main] fetch in background failed: ${errMsg}`);
 
-      if (errMsg.includes("Cookie expired") || errMsg.includes("stale session")) {
+      if (isAuthError(err) || errMsg.includes("Cookie expired") || errMsg.includes("stale session")) {
         logger.warn("[main] Session expired, requiring re-login");
-        win?.webContents.send("status", "Session expired, please login again.");
-        win?.webContents.send("login-required");
-        win?.webContents.send("reload");
+        await requireLogin("Startup session error");
       } else {
         win?.webContents.send("reload");
       }

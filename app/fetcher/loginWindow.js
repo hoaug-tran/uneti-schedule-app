@@ -1,66 +1,131 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, screen } from "electron";
 import {
   saveCookiesToSecureStorage,
   saveCookieHeaderToTxt,
   getCookiePartition,
 } from "./cookieManager.js";
+import { saveUser } from "./userStore.js";
 import { CONFIG } from "../config.js";
 import { logger } from "../utils/logger.js";
 
 export async function showLoginWindow(parent) {
   return new Promise((resolve, reject) => {
+    let finished = false;
+
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const { width: screenW, height: screenH, x: screenX, y: screenY } = display.workArea;
+
+    const winW = Math.min(920, screenW - 40);
+    const winH = Math.min(680, screenH - 40);
+
+    const posX = Math.max(screenX + 20, screenX + screenW - winW - 20);
+    const posY = Math.max(screenY + 20, screenY + Math.round((screenH - winH) / 2));
+
     const win = new BrowserWindow({
-      width: 900,
-      height: 700,
-      parent,
-      modal: true,
+      width: winW,
+      height: winH,
+      x: posX,
+      y: posY,
+      show: true,
+      autoHideMenuBar: true,
+      backgroundColor: "#141414",
+      title: "Đăng nhập UNETI",
       webPreferences: {
-        contextIsolation: true,
+        contextIsolation: false,
         partition: getCookiePartition(),
       },
     });
 
     win.loadURL(CONFIG.UNETI_LOGIN_URL);
-    logger.debug(`[loginWindow] loading URL: ${CONFIG.UNETI_LOGIN_URL}`);
+    logger.debug(`[loginWindow] loading URL: ${CONFIG.UNETI_LOGIN_URL} at x:${posX}, y:${posY}`);
 
-    win.webContents.on("did-navigate", async (_, url) => {
-      logger.debug(`[loginWindow] navigated to: ${url}`);
-      if (
-        url.includes("cloudflare") ||
-        url.includes("cf-browser-verification")
-      ) {
-        logger.warn(`[loginWindow] Cloudflare challenge detected on: ${url}`);
+    async function handleSuccessfulLogin(source) {
+      if (finished) return;
+      finished = true;
+
+      try {
+        await new Promise((r) => setTimeout(r, 600));
+
+        let userData = null;
+        try {
+          const raw = await win.webContents.executeJavaScript(`
+            (() => {
+              try {
+                const u = localStorage.getItem("userData") || localStorage.getItem("userSV") || localStorage.getItem("studentData");
+                if (u) return JSON.parse(u);
+                const root = localStorage.getItem("persist:root");
+                if (root) {
+                  const p = JSON.parse(root);
+                  const auth = p.auth ? JSON.parse(p.auth) : null;
+                  return auth?.currentUser || null;
+                }
+              } catch {}
+              return null;
+            })()
+          `);
+          if (raw) userData = raw;
+        } catch (e) {
+          logger.warn(`[loginWindow] failed to read user data: ${e?.message}`);
+        }
+
+        if (userData) {
+          await saveUser(userData);
+          logger.info(`[loginWindow] saved student profile: ${userData.MaSinhVien || ""}`);
+        }
+
+        const allCookies = await win.webContents.session.cookies.get({});
+        const cookies = allCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+        const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+
+        await saveCookiesToSecureStorage(cookies);
+        await saveCookieHeaderToTxt(cookieHeader);
+        logger.info(`[loginWindow] saved ${cookies.length} cookies from ${source}`);
+
+        win.close();
+        if (parent && !parent.isDestroyed()) {
+          parent.show();
+          parent.focus();
+        }
+        resolve(cookieHeader);
+      } catch (err) {
+        logger.error(`[loginWindow] login capture error: ${err?.message}`);
+        win.close();
+        if (parent && !parent.isDestroyed()) {
+          parent.show();
+          parent.focus();
+        }
+        reject(err);
       }
+    }
 
-      if (
-        url.includes("dashboard") ||
-        (url.includes("sinh-vien-dang-nhap.html") === false &&
-          url !== CONFIG.UNETI_LOGIN_URL)
-      ) {
-        if (url.includes("dashboard") || url.includes("lich-theo-tuan")) {
-          logger.info(
-            `[loginWindow] Successfully logged in, capturing cookies from ${url}`,
-          );
-          const cookies = await win.webContents.session.cookies.get({
-            url: `https://${CONFIG.UNETI_DOMAIN}`,
-          });
-          const cookieHeader = cookies
-            .map((c) => `${c.name}=${c.value}`)
-            .join("; ");
-
-          await saveCookiesToSecureStorage(cookies);
-          await saveCookieHeaderToTxt(cookieHeader);
-
-          logger.info(`[loginWindow] Saved ${cookies.length} cookies.`);
-          win.close();
-          resolve(cookieHeader);
+    win.webContents.session.webRequest.onCompleted(
+      { urls: ["*://apiv3.uneti.edu.vn/api/auth/*"] },
+      (details) => {
+        if (details.statusCode === 200 && details.url.includes("login")) {
+          handleSuccessfulLogin("API auth/login");
         }
       }
-    });
+    );
+
+    const onNavigate = (_, url) => {
+      logger.debug(`[loginWindow] navigated to: ${url}`);
+      if (url.includes("/uneti") || (url.includes("support.uneti.edu.vn") && !url.includes("/dang-nhap"))) {
+        handleSuccessfulLogin(url);
+      }
+    };
+
+    win.webContents.on("did-navigate", onNavigate);
+    win.webContents.on("did-navigate-in-page", onNavigate);
 
     win.on("closed", () => {
-      logger.warn("[loginWindow] Window closed");
-      reject(new Error("Login cancelled"));
+      if (!finished) {
+        logger.warn("[loginWindow] Window closed before login");
+        if (parent && !parent.isDestroyed()) {
+          parent.show();
+          parent.focus();
+        }
+        reject(new Error("Login cancelled"));
+      }
     });
   });
 }

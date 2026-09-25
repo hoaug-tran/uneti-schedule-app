@@ -131,7 +131,8 @@ export async function bootstrapCookiesToSession() {
   const partition = getCookiePartition();
   const ses = session.fromPartition(partition);
 
-  const existing = await ses.cookies.get({ domain: CONFIG.UNETI_DOMAIN });
+  const allExisting = await ses.cookies.get({});
+  const existing = allExisting.filter(c => c.domain?.includes(CONFIG.UNETI_DOMAIN));
   if (existing && existing.length > 0) {
     logger.debug("[cookieManager] session already has cookies");
     return;
@@ -151,16 +152,18 @@ export async function bootstrapCookiesToSession() {
 
   for (const cookie of validCookies) {
     try {
+      const cleanDomain = (cookie.domain || CONFIG.UNETI_DOMAIN).replace(/^\./, "");
+      const cleanPath = cookie.path || "/";
       await ses.cookies.set({
         name: cookie.name,
         value: cookie.value,
-        domain: cookie.domain || CONFIG.UNETI_DOMAIN,
-        path: cookie.path || "/",
+        domain: cookie.domain,
+        path: cleanPath,
         secure: !!cookie.secure,
         httpOnly: !!cookie.httpOnly,
         expirationDate: cookie.expirationDate,
         sameSite: mapSameSite(cookie.sameSite),
-        url: `https://${CONFIG.UNETI_DOMAIN}`,
+        url: `https://${cleanDomain}${cleanPath}`,
       });
     } catch (err) {
       logger.warn(
@@ -198,11 +201,12 @@ export function attachCookieAutoPersist() {
     clearTimeout(cookiePersistTimeout);
     cookiePersistTimeout = setTimeout(async () => {
       try {
-        const all = await ses.cookies.get({ domain: CONFIG.UNETI_DOMAIN });
-        await saveCookiesToSecureStorage(all);
-        const header = all.map((c) => `${c.name}=${c.value}`).join("; ");
+        const all = await ses.cookies.get({});
+        const filtered = all.filter(c => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+        await saveCookiesToSecureStorage(filtered);
+        const header = filtered.map((c) => `${c.name}=${c.value}`).join("; ");
         await saveCookieHeaderToTxt(header);
-        logger.debug(`[cookieManager] auto-persisted ${all.length} cookies`);
+        logger.debug(`[cookieManager] auto-persisted ${filtered.length} cookies`);
       } catch (err) {
         logger.warn(`[cookieManager] auto-persist failed: ${err?.message}`);
       }
@@ -247,18 +251,19 @@ export async function areCookiesValid() {
 
 export async function buildCookieHeader() {
   try {
-    const txt = await loadCookieHeaderFromTxt();
-    if (txt) return txt;
-  } catch { }
-
-  try {
     const partition = getCookiePartition();
     const ses = session.fromPartition(partition);
-    const cookies = await ses.cookies.get({ domain: CONFIG.UNETI_DOMAIN });
-    if (cookies && cookies.length > 0) {
+    const all = await ses.cookies.get({});
+    const cookies = all.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+    if (cookies.length > 0) {
       return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
     }
-  } catch { }
+  } catch {}
+
+  try {
+    const txt = await loadCookieHeaderFromTxt();
+    if (txt) return txt;
+  } catch {}
 
   return "";
 }
