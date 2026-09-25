@@ -8,6 +8,15 @@ import { saveUser } from "./userStore.js";
 import { CONFIG } from "../config.js";
 import { logger } from "../utils/logger.js";
 
+function sanitizeUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return String(rawUrl || "").split("?")[0];
+  }
+}
+
 export async function showLoginWindow(parent) {
   return new Promise((resolve, reject) => {
     let finished = false;
@@ -70,7 +79,8 @@ export async function showLoginWindow(parent) {
 
         if (userData) {
           await saveUser(userData);
-          logger.info(`[loginWindow] saved student profile: ${userData.MaSinhVien || ""}`);
+          const maskedId = userData.MaSinhVien ? `${String(userData.MaSinhVien).slice(0, 4)}****` : "unknown";
+          logger.info(`[loginWindow] saved student profile: ${maskedId}`);
         }
 
         const allCookies = await win.webContents.session.cookies.get({});
@@ -79,7 +89,8 @@ export async function showLoginWindow(parent) {
 
         await saveCookiesToSecureStorage(cookies);
         await saveCookieHeaderToTxt(cookieHeader);
-        logger.info(`[loginWindow] saved ${cookies.length} cookies from ${source}`);
+        const cleanSource = source.startsWith("http") ? sanitizeUrl(source) : source;
+        logger.info(`[loginWindow] saved ${cookies.length} cookies from ${cleanSource}`);
 
         win.close();
         if (parent && !parent.isDestroyed()) {
@@ -108,7 +119,7 @@ export async function showLoginWindow(parent) {
     );
 
     const onNavigate = (_, url) => {
-      logger.debug(`[loginWindow] navigated to: ${url}`);
+      logger.debug(`[loginWindow] navigated to: ${sanitizeUrl(url)}`);
       if (url.includes("/uneti") || (url.includes("support.uneti.edu.vn") && !url.includes("/dang-nhap"))) {
         handleSuccessfulLogin(url);
       }
