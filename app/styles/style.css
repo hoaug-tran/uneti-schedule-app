@@ -253,6 +253,7 @@ button[disabled] {
   overflow-y: auto;
   opacity: 1;
   transition: opacity 0.2s ease-in-out;
+  scroll-behavior: smooth;
 }
 
 .calendar.loading {
@@ -328,7 +329,10 @@ button[disabled] {
   border-radius: 6px;
   background: var(--card);
   border: 1px solid #2a2a2a;
-  transition: all 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.15s ease,
+              border-color 0.15s ease,
+              box-shadow 0.18s ease;
   position: relative;
 }
 
@@ -352,6 +356,8 @@ button[disabled] {
 .card:hover {
   background: var(--card-hover);
   border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .subject {
@@ -1029,4 +1035,76 @@ button[disabled] {
   background: rgba(59, 130, 246, 0.1);
   color: #1d4ed8;
   border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  height: 100%;
+  gap: 12px;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.empty-btn {
+  margin-top: 10px;
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  padding: 0 16px !important;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px !important;
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--accent-light) !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px;
+}
+
+.empty-btn:hover {
+  background: var(--accent-light) !important;
+  color: #ffffff !important;
+}
+
+.empty-btn:active {
+  opacity: 0.9;
+  transform: scale(0.98);
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-btn .icon {
+  width: 14px;
+  height: 14px;
 }

@@ -300,7 +300,10 @@ function showUpdateToast(state, data = {}) {
     el.innerHTML = `
       <div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span>⬇ ${i18n.t('updateDownloading')}</span>
+          <span style="display:inline-flex;align-items:center;gap:4px">
+            <i data-lucide="download" class="icon" style="width:14px;height:14px"></i>
+            ${i18n.t('updateDownloading')}
+          </span>
           <b>${pct}%</b>
         </div>
         <div style="background:rgba(255,255,255,.25);border-radius:4px;height:5px;overflow:hidden">
@@ -311,6 +314,7 @@ function showUpdateToast(state, data = {}) {
           <span>${spd} MB/s</span>
         </div>
       </div>`;
+    if (window.lucide) window.lucide.createIcons();
     return;
   }
 
@@ -414,15 +418,46 @@ function registerIpcListeners() {
       justLoggedIn = true;
       setTimeout(() => { justLoggedIn = false; }, 10000);
       showToast(i18n.t("loginSuccess"), "login-success-toast", "success");
-      loadSchedule(0);
+      const btnGpa = document.getElementById("btn-gpa");
+      if (btnGpa && btnGpa.dataset.view === "gpa") {
+        btnGpa.dataset.view = "schedule";
+        btnGpa.click();
+      } else {
+        await render(window.dateAPI.weekKey(currentWeek));
+      }
     });
   }
   if (window.widgetAPI?.onLoginRequired) {
     window.widgetAPI.onLoginRequired(() => {
       window.loggerAPI?.debug("onLoginRequired event received");
-      showToast(i18n.t("sessionExpired"), "login-required-toast", "error");
-      render(window.dateAPI.weekKey(currentWeek));
-      window.widgetAPI.login();
+      createToast(i18n.t("sessionExpired"), {
+        id: "login-required-toast",
+        type: "error",
+        clickable: true,
+        duration: 0,
+        onClick: () => window.widgetAPI.login(),
+      });
+      const btnGpa = document.getElementById("btn-gpa");
+      if (btnGpa && btnGpa.dataset.view === "gpa") {
+        const body = document.querySelector(".body");
+        if (body) {
+          body.innerHTML = `
+            <div class="empty-state">
+              <i data-lucide="graduation-cap" class="empty-icon"></i>
+              <div class="empty-title">${i18n.t("gpaNotLoggedInTitle")}</div>
+              <div class="empty-desc">${i18n.t("gpaNotLoggedInDesc")}</div>
+              <button id="btn-empty-gpa-login" class="empty-btn">${i18n.t("login")}</button>
+            </div>
+          `;
+          if (window.lucide) window.lucide.createIcons();
+          const btnEmptyGpaLogin = document.getElementById("btn-empty-gpa-login");
+          if (btnEmptyGpaLogin) {
+            btnEmptyGpaLogin.onclick = () => window.widgetAPI?.login?.();
+          }
+        }
+      } else {
+        render(window.dateAPI.weekKey(currentWeek));
+      }
     });
   }
 
@@ -518,7 +553,7 @@ async function render(isoDate) {
     let state = "first";
     let loginLabel = i18n.t("login");
 
-    if (payload && payload.weekStart) {
+    if (hasCookies && payload && payload.weekStart) {
       state = "ok";
       justLoggedIn = false;
       loginLabel = i18n.t("logout");
@@ -531,6 +566,13 @@ async function render(isoDate) {
         state = "expired";
         loginLabel = i18n.t("loginAgain");
       }
+    } else if (payload && payload.weekStart) {
+      state = "expired";
+      loginLabel = i18n.t("loginAgain");
+      currentWeek = new Date(payload.weekStart);
+    } else {
+      state = "first";
+      loginLabel = i18n.t("login");
     }
 
     if (!payload && !hasCookies)
@@ -568,9 +610,14 @@ async function render(isoDate) {
         bodyHtml = createSkeletonHTML();
       } else {
         metaHtml = i18n.t("noData");
-        bodyHtml = `<div class="empty">${i18n
-          .t("noDataDesc")
-          .replace("đăng nhập", `<b>${loginLabel}</b>`)}</div>`;
+        bodyHtml = `
+          <div class="empty-state">
+            <i data-lucide="calendar-off" class="empty-icon"></i>
+            <div class="empty-title">${i18n.t("noData")}</div>
+            <div class="empty-desc">${i18n.t("noDataDesc")}</div>
+            <button id="btn-empty-login" class="empty-btn">${loginLabel}</button>
+          </div>
+        `;
       }
     } else {
       const { updatedAt, data, weekStart } = payload;
@@ -679,8 +726,14 @@ async function render(isoDate) {
     <div class="footer-bar">
       <div class="meta">${metaHtml}</div>
       <div class="week-nav">
-        <button id="btn-prev-week">${i18n.t("previous")}</button>
-        <button id="btn-next-week">${i18n.t("next")}</button>
+        <button id="btn-prev-week" class="nav-btn">
+          <i data-lucide="chevron-left" class="icon"></i>
+          <span>${i18n.t("previous")}</span>
+        </button>
+        <button id="btn-next-week" class="nav-btn">
+          <span>${i18n.t("next")}</span>
+          <i data-lucide="chevron-right" class="icon"></i>
+        </button>
       </div>
     </div>
   </div>`;
@@ -712,6 +765,19 @@ async function render(isoDate) {
     const btnPrevWeek = $("#btn-prev-week");
     const btnNextWeek = $("#btn-next-week");
     const btnTheme = $("#btn-theme");
+    const btnEmptyLogin = $("#btn-empty-login");
+
+    if (btnEmptyLogin) {
+      btnEmptyLogin.onclick = async () => {
+        const body = document.querySelector(".body");
+        if (body) body.innerHTML = createSkeletonHTML();
+        try {
+          await window.widgetAPI?.login?.();
+        } catch {
+          await render(window.dateAPI.weekKey(currentWeek));
+        }
+      };
+    }
 
     window.loggerAPI?.debug(`[Buttons] btnUpdate exists: ${!!btnUpdate}, btnRefresh exists: ${!!btnRefresh}`);
 
@@ -789,6 +855,24 @@ async function render(isoDate) {
         btnGpa.textContent = i18n.t("scheduleTab");
         btnGpa.classList.add("active");
         if (footerBar) footerBar.style.display = "none";
+
+        const hasCookies = await window.scheduleAPI?.cookiesExists?.();
+        if (!hasCookies) {
+          body.innerHTML = `
+            <div class="empty-state">
+              <i data-lucide="graduation-cap" class="empty-icon"></i>
+              <div class="empty-title">${i18n.t("gpaNotLoggedInTitle")}</div>
+              <div class="empty-desc">${i18n.t("gpaNotLoggedInDesc")}</div>
+              <button id="btn-empty-gpa-login" class="empty-btn">${i18n.t("login")}</button>
+            </div>
+          `;
+          if (window.lucide) window.lucide.createIcons();
+          const btnEmptyGpaLogin = document.getElementById("btn-empty-gpa-login");
+          if (btnEmptyGpaLogin) {
+            btnEmptyGpaLogin.onclick = () => window.widgetAPI?.login?.();
+          }
+          return;
+        }
 
         body.innerHTML = `
           <div class="gpa-panel">
@@ -1027,8 +1111,14 @@ async function render(isoDate) {
 
         const data = refreshed?.data || academic;
         if (!data?.subjects?.length) {
-          createToast(i18n.t("noDataDesc"), { id: "gpa-toast", type: "info", priority: true });
-          await renderView({ subjects: [] });
+          body.innerHTML = `
+            <div class="empty-state">
+              <i data-lucide="graduation-cap" class="empty-icon"></i>
+              <div class="empty-title">${i18n.t("gpaNoDataTitle")}</div>
+              <div class="empty-desc">${i18n.t("gpaNoDataDesc")}</div>
+            </div>
+          `;
+          if (window.lucide) window.lucide.createIcons();
           return;
         }
 
@@ -1041,7 +1131,13 @@ async function render(isoDate) {
         if (state === "ok") {
           await window.widgetAPI?.logout?.();
         } else {
-          await window.widgetAPI?.login?.();
+          const body = document.querySelector(".body");
+          if (body) body.innerHTML = createSkeletonHTML();
+          try {
+            await window.widgetAPI?.login?.();
+          } catch {
+            await render(window.dateAPI.weekKey(currentWeek));
+          }
         }
       };
     }
@@ -1182,10 +1278,15 @@ async function changeWeek(offset) {
     window.loggerAPI?.error(`[changeWeek] ERROR: ${err?.message}`, err);
 
     if (err?.message?.includes("Cookie expired") || err?.message?.includes("Session") || err?.message?.includes("No cookies")) {
-      window.loggerAPI?.warn(`[changeWeek] Session expired, triggering login`);
+      window.loggerAPI?.warn(`[changeWeek] Session expired`);
       hideToast(toastId);
-      createToast(i18n.t("sessionExpired"), { id: toastId, type: "error", priority: true });
-      window.widgetAPI.login();
+      createToast(i18n.t("sessionExpired"), {
+        id: toastId,
+        type: "error",
+        clickable: true,
+        priority: true,
+        onClick: () => window.widgetAPI.login(),
+      });
       return;
     }
 
