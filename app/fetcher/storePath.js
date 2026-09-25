@@ -12,6 +12,7 @@ function getPaths() {
     COOKIE_TXT: path.join(storeDir, "cookies.txt"),
     OUT_JSON: path.join(storeDir, "schedule.json"),
     RAW_HTML: path.join(storeDir, "fragment.html"),
+    USER_JSON: path.join(storeDir, "user.json"),
   };
 }
 
