@@ -1,6 +1,6 @@
 {
   "name": "uneti-schedule-widget",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Widget lịch học UNETI",
   "author": "Trần Kính Hoàng (hoaug)",
   "type": "module",
@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "auto-launch": "^5.0.6",
-    "cheerio": "^1.0.0-rc.12",
     "dotenv": "^17.2.3",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.6.2",
@@ -38,11 +37,7 @@
     "files": [
       "main/**/*",
       "app/**/*",
-      "preload.cjs",
       "package.json"
-    ],
-    "asarUnpack": [
-      "node_modules/htmlparser2/**"
     ],
     "extraResources": [
       {

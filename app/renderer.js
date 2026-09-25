@@ -913,26 +913,13 @@ async function render(isoDate) {
             (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
           );
 
-        const isGpaSubj = (s) => {
-          const name = String(s?.subjectName ?? "").toLowerCase().trim();
-          if (!name) return false;
-          if (name.includes("giáo dục thể chất") || name.includes("gdtc")) return false;
-          if (name.includes("giáo dục quốc phòng") || name.includes("gdqp")) return false;
-          if (name.includes("điểm test") || name.includes("toeic")) return false;
-          return true;
-        };
-
+        const isGpaSubj = (s) => !s.excludedFromGpa;
         const calcSemGpa = (items, semSummary) => {
-          if (semSummary?.semGpa4 != null) {
-            const gpaItems = items.filter(isGpaSubj);
-            const credits = gpaItems.reduce((sum, s) => sum + (Number(s.credits) || 0), 0);
-            return { gpa: semSummary.semGpa4, credits: semSummary.accumulatedCredits ?? credits };
-          }
+          if (semSummary?.semGpa4 != null) return { gpa: semSummary.semGpa4, credits: semSummary.accumulatedCredits ?? 0 };
           const gpaItems = items.filter((s) => isGpaSubj(s) && !s.isPending && s.gradePoint !== null);
           const credits = gpaItems.reduce((sum, s) => sum + (Number(s.credits) || 0), 0);
-          if (!credits) return { gpa: 0, credits: 0 };
           const weighted = gpaItems.reduce((sum, s) => sum + (Number(s.gradePoint) || 0) * (Number(s.credits) || 0), 0);
-          return { gpa: weighted / credits, credits };
+          return { gpa: credits ? weighted / credits : 0, credits };
         };
 
         const getGradeClass = (letter) => {
@@ -944,162 +931,176 @@ async function render(isoDate) {
           return "";
         };
 
-        const renderView = async (data, selectedTarget = "good") => {
+        const renderView = async (data, selectedTarget = "good", overrides = {}) => {
           const footerBar = document.querySelector(".footer-bar");
           if (footerBar) footerBar.style.display = "none";
-
           if (!data?.subjects?.length) {
             body.innerHTML = `<div class="gpa-panel"><div class="gpa-head"><div><h3 class="gpa-head-title">${i18n.t("gpaNoDataTitle")}</h3><p class="gpa-head-sub">${i18n.t("gpaNoDataDesc")}</p></div></div></div>`;
             return;
           }
 
-          const plan = await window.academicAPI?.plan?.(selectedTarget);
-          const suggestionMap = new Map();
-          (plan?.data?.suggestions || []).forEach((x) => {
-            if (x.index >= 0) suggestionMap.set(`idx:${x.index}`, x);
-            if (x.key) suggestionMap.set(`key:${x.key}`, x);
-            if (x.subjectCode) suggestionMap.set(`code:${String(x.subjectCode).trim().toLowerCase()}`, x);
-            if (x.subjectName) suggestionMap.set(`name:${String(x.subjectName).trim().toLowerCase()}`, x);
-          });
-
+          const [plan, simulation] = await Promise.all([
+            window.academicAPI?.plan?.(selectedTarget),
+            window.academicAPI?.simulate?.(overrides),
+          ]);
+          const projected = simulation?.ok ? simulation.data : null;
+          const suggestionMap = new Map((plan?.data?.suggestions || []).map((suggestion) => [suggestion.index, suggestion]));
           const groups = data.subjects.reduce((acc, s) => {
             const sem = s.semester || i18n.t("unknownSemester");
             (acc[sem] ||= []).push(s);
             return acc;
           }, {});
-
-          const targetLabels = {
-            excellent: i18n.t("gpaTargetExcellent"),
-            good: i18n.t("gpaTargetGood"),
-            fair: i18n.t("gpaTargetFair"),
+          const parseSemKey = (name, subjects = []) => {
+            const isPendingGroup = subjects.length > 0 && subjects.every((s) => s.isPending || (!s.letter && s.gradePoint === null && s.finalScore === null));
+            const isPhu = /hockyphu|kyphu|phu/i.test(name);
+            const m = name.match(/(\d+)\s*\(\s*(\d{4})\s*-\s*(\d{4})\s*\)/);
+            const mYear = name.match(/\(\s*(\d{4})\s*-\s*(\d{4})\s*\)/);
+            const endYear = m ? parseInt(m[3], 10) : mYear ? parseInt(mYear[2], 10) : 0;
+            const sem = isPhu ? 3 : m ? parseInt(m[1], 10) : 0;
+            return { isPendingGroup, endYear, sem };
           };
+          const sortedGroups = Object.entries(groups).sort(([nameA, subsA], [nameB, subsB]) => {
+            const pa = parseSemKey(nameA, subsA);
+            const pb = parseSemKey(nameB, subsB);
+            if (pa.isPendingGroup !== pb.isPendingGroup) return pa.isPendingGroup ? -1 : 1;
+            if (pb.endYear !== pa.endYear) return pb.endYear - pa.endYear;
+            return pb.sem - pa.sem;
+          });
+          const targetLabels = { excellent: i18n.t("gpaTargetExcellent"), good: i18n.t("gpaTargetGood"), fair: i18n.t("gpaTargetFair") };
+          const currentGpa = data?.summary?.cumGpa4 ?? null;
+          const currentGpa10 = data?.summary?.cumGpa10 ?? null;
+          const localGpa = plan?.data?.gpa ?? 0;
+          const projectedGpa = projected?.gpa ?? localGpa;
+          const projectedGpa10 = projected?.gpa10 ?? null;
+          const delta4 = currentGpa != null ? projectedGpa - currentGpa : null;
+          const delta10 = projectedGpa10 != null && currentGpa10 != null ? projectedGpa10 - currentGpa10 : null;
+          const accCredits = data?.summary?.accumulatedCredits ?? plan?.data?.credits ?? 0;
+          const baseGpaSubjs = data.subjects.filter((s) => !s.isPending && s.finalScore !== null);
+          const baseKeys = new Set(baseGpaSubjs.map((s) => String(s.courseId || s.subjectId || "").trim().toLowerCase()));
 
-          const currentGpa = data?.summary?.cumGpa4 ?? plan?.data?.gpa ?? 0;
-          const totalCredits = plan?.data?.credits ?? 0;
-          const regCredits = data?.summary?.registeredCredits;
-          const accCredits = data?.summary?.accumulatedCredits;
+          let additionalCredits = 0;
+          for (const s of data.subjects) {
+            const key = String(s.courseId || s.subjectId || "").trim().toLowerCase();
+            if (!key || baseKeys.has(key)) continue;
+            const ov = overrides[key];
+            if (ov !== undefined && ov !== null && ov !== "") {
+              const num = Number(ov);
+              if (Number.isFinite(num) && num >= 4.0) {
+                additionalCredits += (Number(s.credits) || 0);
+              }
+            }
+          }
+          const projectedAccCredits = accCredits + additionalCredits;
 
-          const unitStr = i18n.t("gpaCreditsUnit");
-          let creditLabel = "";
-          if (accCredits != null && regCredits != null) {
-            creditLabel = `${accCredits}/${regCredits} ${unitStr}`;
-          } else {
-            creditLabel = `${totalCredits} ${unitStr}`;
+          const rankOf = (gpa4) => {
+            if (gpa4 == null) return '';
+            const rounded = Math.round((Number(gpa4) + Number.EPSILON) * 100) / 100;
+            if (rounded >= 3.6) return 'Xuất sắc';
+            if (rounded >= 3.2) return 'Giỏi';
+            if (rounded >= 2.5) return 'Khá';
+            if (rounded >= 2.0) return 'Trung bình';
+            return 'Yếu';
+          };
+          const rank = data?.summary?.academicRank || rankOf(currentGpa || localGpa) || "";
+          const projectedRank = rankOf(projectedGpa);
+          const rankOrder = { "Xuất sắc": 5, "Giỏi": 4, "Khá": 3, "Trung bình": 2, "Yếu": 1 };
+          let deltaRankHtml = `<span class="gpa-delta-eq">—</span>`;
+          if (projectedRank && rank && projectedRank !== rank) {
+            const isUp = (rankOrder[projectedRank] || 0) > (rankOrder[rank] || 0);
+            deltaRankHtml = isUp
+              ? `<span class="gpa-delta-up">↑ ${esc(projectedRank)}</span>`
+              : `<span class="gpa-delta-down">↓ ${esc(projectedRank)}</span>`;
           }
 
-          const achieved = plan?.data?.achieved;
-          const suggestCount = plan?.data?.suggestions?.length ?? 0;
+          const hasOverrides = Object.keys(overrides).length > 0;
+          const deltaSign = (v) => v === null ? `<span class="gpa-delta-eq">—</span>` : v > 0.001 ? `<span class="gpa-delta-up">+${v.toFixed(2)}</span>` : v < -0.001 ? `<span class="gpa-delta-down">${v.toFixed(2)}</span>` : `<span class="gpa-delta-eq">—</span>`;
+          const planMsg = plan?.data?.achieved
+            ? `<span class="gpa-status-ok">${i18n.t('gpaPlanAchieved').replace('{target}', targetLabels[selectedTarget] || '')}</span>`
+            : plan?.data?.possible
+              ? `${i18n.t('gpaPlanImprove')}: <b>${plan.data.suggestions.length} môn</b>`
+              : `<span class="gpa-status-warn">${i18n.t('gpaPlanImpossible')}</span>`;
 
-          let statusMsg = "";
-          if (achieved) {
-            statusMsg = i18n.t("gpaAchieved").replace("{target}", targetLabels[selectedTarget] || "");
-          } else {
-            statusMsg = i18n.t("gpaImproveNeeded").replace("{count}", suggestCount);
-          }
-
-          const sectionsHtml = Object.entries(groups)
-            .map(([semester, subjects]) => {
-              const semSummary = data?.semesterSummaries?.[semester];
-              const semStats = calcSemGpa(subjects, semSummary);
-              const rowsHtml = subjects
-                .map((s) => {
-                  const idx = data.subjects.indexOf(s);
-                  const isGpa = isGpaSubj(s);
-                  const isPending = s.isPending || (!s.letter && s.gradePoint === null && s.finalScore === null);
-                  const sKey = String(s.subjectCode || s.subjectName || "").trim().toLowerCase();
-                  const sCode = String(s.subjectCode || "").trim().toLowerCase();
-                  const sName = String(s.subjectName || "").trim().toLowerCase();
-
-                  const sug = isGpa && !isPending ? (
-                    suggestionMap.get(`idx:${idx}`) ||
-                    suggestionMap.get(`key:${sKey}`) ||
-                    (sCode ? suggestionMap.get(`code:${sCode}`) : null) ||
-                    (sName ? suggestionMap.get(`name:${sName}`) : null)
-                  ) : null;
-
-                  const gradeCls = getGradeClass(s.letter);
-
-                  let suggestCell = "";
-                  if (isPending) {
-                    suggestCell = `<span class="gpa-tag-pending">${i18n.t("gpaTagPending")}</span>`;
-                  } else if (!isGpa) {
-                    suggestCell = `<span class="gpa-tag-nogpa">${i18n.t("gpaTagNoGpa")}</span>`;
-                  } else if (sug) {
-                    suggestCell = `<span class="gpa-need">${i18n.t("gpaTagNeedA")}</span>`;
-                  }
-
-                  const letterCell = isPending
-                    ? `<span class="gpa-tag-pending">${i18n.t("gpaTagPendingLetter")}</span>`
-                    : s.letter
-                    ? `<span class="grade-pill ${gradeCls}">${esc(s.letter)}</span>`
-                    : `-`;
-
-                  return `
-                    <tr>
-                      <td class="gpa-col-name">${esc(s.subjectName)}</td>
-                      <td class="gpa-col-tc gpa-cell-center">${s.credits ?? "-"}</td>
-                      <td class="gpa-col-letter gpa-cell-center">${letterCell}</td>
-                      <td class="gpa-col-score gpa-cell-center">${s.finalScore != null ? s.finalScore.toFixed(1) : "-"}</td>
-                      <td class="gpa-col-suggest gpa-cell-center">${suggestCell}</td>
-                    </tr>
-                  `;
-                })
-                .join("");
-
-              const semSummaryText = i18n
-                .t("gpaSemSummary")
-                .replace("{gpa}", semStats.gpa.toFixed(2))
-                .replace("{credits}", semStats.credits);
-
-              return `
-                <section class="gpa-semester">
-                  <div class="gpa-semester-head">
-                    <b>${esc(semester)}</b>
-                    <span>${semSummaryText}</span>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th class="gpa-col-name">${i18n.t("gpaColSubject")}</th>
-                        <th class="gpa-col-tc gpa-cell-center">${i18n.t("gpaColCredits")}</th>
-                        <th class="gpa-col-letter gpa-cell-center">${i18n.t("gpaColLetter")}</th>
-                        <th class="gpa-col-score gpa-cell-center">${i18n.t("gpaColScore")}</th>
-                        <th class="gpa-col-suggest gpa-cell-center">${i18n.t("gpaColSuggest")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>${rowsHtml}</tbody>
-                  </table>
-                </section>
-              `;
-            })
-            .join("");
-
-          const titleText = i18n
-            .t("gpaCurrentTitle")
-            .replace("{gpa}", currentGpa.toFixed(2))
-            .replace("{credits}", creditLabel);
-
-          body.innerHTML = `
-            <div class="gpa-panel">
-              <div class="gpa-head">
-                <div>
-                  <h3 class="gpa-head-title">${titleText}</h3>
-                  <p class="gpa-head-sub">${statusMsg}</p>
-                </div>
-                <select id="gpa-target">
-                  <option value="excellent" ${selectedTarget === "excellent" ? "selected" : ""}>${i18n.t("gpaTargetExcellent")}</option>
-                  <option value="good" ${selectedTarget === "good" ? "selected" : ""}>${i18n.t("gpaTargetGood")}</option>
-                  <option value="fair" ${selectedTarget === "fair" ? "selected" : ""}>${i18n.t("gpaTargetFair")}</option>
-                </select>
-              </div>
-              ${sectionsHtml}
+          const displayCurrentGpa4 = currentGpa != null ? `<b>${currentGpa.toFixed(2)}</b>` : `<span class="gpa-delta-eq" title="Đăng nhập để cập nhật">${localGpa.toFixed(2)}*</span>`;
+          const summaryCard = `<div class="gpa-summary-card">
+            <table class="gpa-summary-table">
+              <thead><tr><th></th><th>${i18n.t('gpaSummaryActual')}</th><th>${i18n.t('gpaSummaryProjected')}</th><th>${i18n.t('gpaSummaryDelta')}</th></tr></thead>
+              <tbody>
+                <tr><td>GPA / 4.0</td><td>${displayCurrentGpa4}</td><td><b>${projectedGpa.toFixed(2)}</b></td><td>${deltaSign(delta4)}</td></tr>
+                ${currentGpa10 != null ? `<tr><td>GPA / 10</td><td>${currentGpa10.toFixed(2)}</td><td>${projectedGpa10 != null ? projectedGpa10.toFixed(2) : '—'}</td><td>${deltaSign(delta10)}</td></tr>` : ''}
+                <tr><td>${i18n.t('gpaSummaryCredits')}</td><td>${accCredits}</td><td><b>${projectedAccCredits}</b></td><td>${additionalCredits > 0 ? `<span class="gpa-delta-up">+${additionalCredits} TC</span>` : `<span class="gpa-delta-eq">—</span>`}</td></tr>
+                ${rank ? `<tr><td>${i18n.t('gpaSummaryRank')}</td><td>${esc(rank)}</td><td><b>${esc(projectedRank)}</b></td><td>${deltaRankHtml}</td></tr>` : ''}
+              </tbody>
+            </table>
+            <div class="gpa-summary-footer">
+              <div class="gpa-plan-msg">${planMsg}</div>
+              <div class="gpa-summary-actions">${hasOverrides ? `<button id="gpa-reset" class="gpa-reset-btn">${i18n.t('gpaResetBtn')}</button>` : ''}<div class="gpa-target-wrap"><span class="gpa-target-label">${i18n.t('gpaTargetLabel')}:</span><div class="gpa-custom-select" id="gpa-target-wrap"><button class="gpa-custom-select-btn" id="gpa-target-btn" aria-haspopup="listbox">${targetLabels[selectedTarget] || ''}</button><ul class="gpa-custom-select-list" id="gpa-target-list" role="listbox"><li data-val="excellent" role="option" ${selectedTarget === 'excellent' ? 'class="selected"' : ''}>${i18n.t('gpaTargetExcellent')}</li><li data-val="good" role="option" ${selectedTarget === 'good' ? 'class="selected"' : ''}>${i18n.t('gpaTargetGood')}</li><li data-val="fair" role="option" ${selectedTarget === 'fair' ? 'class="selected"' : ''}>${i18n.t('gpaTargetFair')}</li></ul></div></div></div>
             </div>
-          `;
+          </div>`;
 
-          const selectEl = document.getElementById("gpa-target");
-          if (selectEl) {
-            selectEl.onchange = (e) => renderView(data, e.target.value);
+          const sectionsHtml = sortedGroups.map(([semester, semSubjects]) => {
+            const semStats = calcSemGpa(semSubjects, data?.semesterSummaries?.[semester]);
+            const isCurrentSem = semSubjects.length > 0 && semSubjects.every(s => s.isPending || (!s.letter && s.gradePoint === null && s.finalScore === null));
+            const semBadge = isCurrentSem ? ` <span class="gpa-sem-current-badge">Đang học</span>` : '';
+            const rowsHtml = semSubjects.map((s) => {
+              const idx = data.subjects.indexOf(s);
+              const isGpa = isGpaSubj(s);
+              const isPending = s.isPending || (!s.letter && s.gradePoint === null && s.finalScore === null);
+              const suggestion = suggestionMap.get(idx);
+              const key = String(s.courseId || s.subjectId || "").trim().toLowerCase();
+              const hasOverride = Object.hasOwn(overrides, key);
+              const overrideVal = hasOverride ? overrides[key] : null;
+              const canInput = isGpa && key;
+              const placeholder = s.finalScore != null ? s.finalScore.toFixed(1) : '0.0';
+              const input = canInput
+                ? `<input class="gpa-score-input${hasOverride ? ' has-override' : ''}${isPending ? ' is-pending-input' : ''}" data-gpa-key="${esc(key)}" value="${overrideVal ?? ''}" placeholder="${placeholder}" inputmode="decimal" aria-label="Điểm dự kiến ${esc(s.subjectName)}">`
+                : `<span class="gpa-tag-nogpa">${i18n.t('gpaTagNoGpa')}</span>`;
+              const suggestionCell = suggestion ? `<span class="gpa-need">${esc(suggestion.improveTo)}</span>` : '';
+              const letterCell = isPending ? `<span class="gpa-tag-pending">${i18n.t('gpaTagPendingLetter')}</span>` : s.letter ? `<span class="grade-pill ${getGradeClass(s.letter)}">${esc(s.letter)}</span>` : '-';
+              return `<tr><td class="gpa-col-name">${esc(s.subjectName)}</td><td class="gpa-col-tc gpa-cell-center">${s.credits ?? '-'}</td><td class="gpa-col-letter gpa-cell-center">${letterCell}</td><td class="gpa-col-score gpa-cell-center">${input}</td><td class="gpa-col-suggest gpa-cell-center">${suggestionCell}</td></tr>`;
+            }).join("");
+            const semSummaryText = i18n.t("gpaSemSummary").replace("{gpa}", semStats.gpa.toFixed(2)).replace("{credits}", semStats.credits);
+            const semTitle = String(semester || "").replace(/^Hockyphu/i, "Học kỳ phụ") || i18n.t("unknownSemester");
+            return `<section class="gpa-semester"><div class="gpa-semester-head"><span class="gpa-sem-title"><b>${esc(semTitle)}</b>${semBadge}</span><span>${semSummaryText}</span></div><table><thead><tr><th class="gpa-col-name">${i18n.t('gpaColSubject')}</th><th class="gpa-col-tc gpa-cell-center">${i18n.t('gpaColCredits')}</th><th class="gpa-col-letter gpa-cell-center">${i18n.t('gpaColLetter')}</th><th class="gpa-col-score gpa-cell-center">${i18n.t('gpaProjectedCol')} ✎</th><th class="gpa-col-suggest gpa-cell-center">${i18n.t('gpaTargetCol')}</th></tr></thead><tbody>${rowsHtml}</tbody></table></section>`;
+          }).join("");
+
+          body.innerHTML = `<div class="gpa-panel">${summaryCard}${sectionsHtml}</div>`;
+          document.getElementById("gpa-reset")?.addEventListener("click", () => renderView(data, selectedTarget, {}));
+          const targetBtn = document.getElementById("gpa-target-btn");
+          const targetList = document.getElementById("gpa-target-list");
+          const targetWrap = document.getElementById("gpa-target-wrap");
+          if (targetBtn && targetList && targetWrap) {
+            targetBtn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const open = targetWrap.classList.toggle("open");
+              targetBtn.setAttribute("aria-expanded", String(open));
+            });
+            targetList.querySelectorAll("li").forEach((li) => li.addEventListener("click", () => {
+              const val = li.dataset.val;
+              if (val && val !== selectedTarget) renderView(data, val, overrides);
+              else targetWrap.classList.remove("open");
+            }));
+            document.addEventListener("click", (e) => {
+              if (!targetWrap.contains(e.target)) targetWrap.classList.remove("open");
+            }, { once: false, capture: false });
           }
+          body.querySelectorAll(".gpa-score-input").forEach((inp) => {
+            inp.addEventListener("input", (event) => {
+              const raw = event.target.value;
+              const cleaned = raw.replace(/[^0-9.,]/g, "").replace(",", ".");
+              if (raw !== cleaned) event.target.value = cleaned;
+              const score = Number(cleaned);
+              if (cleaned !== "" && cleaned !== "." && Number.isFinite(score) && score > 10) event.target.value = "10";
+            });
+            inp.addEventListener("change", (event) => {
+              const value = String(event.target.value).trim().replace(",", ".");
+              const score = Number(value);
+              const next = { ...overrides };
+              if (value === "") delete next[event.target.dataset.gpaKey];
+              else if (Number.isFinite(score) && score >= 0 && score <= 10) next[event.target.dataset.gpaKey] = score;
+              else { event.target.value = ""; return; }
+              renderView(data, selectedTarget, next);
+            });
+          });
         };
 
         const loadPromise = window.academicAPI?.load?.();

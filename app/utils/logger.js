@@ -9,6 +9,18 @@ const LOG_LEVELS = {
     ERROR: 3,
 };
 
+function sanitizeLogText(text) {
+    if (typeof text !== "string") return text;
+    return text.replace(/https?:\/\/[^\s"'<>]+/g, (match) => {
+        try {
+            const u = new URL(match);
+            return `${u.origin}${u.pathname}`;
+        } catch {
+            return match.split("?")[0];
+        }
+    });
+}
+
 class Logger {
     constructor() {
         this.logDir = path.join(app.getPath("userData"), "logs");
@@ -70,10 +82,16 @@ class Logger {
             (k) => LOG_LEVELS[k] === level
         );
 
-        let msg = `[${timestamp}] [${levelStr}] ${message}`;
+        const cleanMessage = sanitizeLogText(String(message ?? ""));
+        let msg = `[${timestamp}] [${levelStr}] ${cleanMessage}`;
 
         if (context && Object.keys(context).length > 0) {
-            msg += ` ${JSON.stringify(context)}`;
+            try {
+                const serialized = JSON.stringify(context);
+                msg += ` ${sanitizeLogText(serialized)}`;
+            } catch {
+                msg += ` [Context unstringifiable]`;
+            }
         }
 
         return msg;

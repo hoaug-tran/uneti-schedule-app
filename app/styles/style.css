@@ -816,6 +816,108 @@ button[disabled] {
   padding: 14px 16px;
 }
 
+.gpa-summary-card {
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+  overflow: visible;
+}
+
+.gpa-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.gpa-summary-table th,
+.gpa-summary-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+}
+
+.gpa-summary-table thead th {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.gpa-summary-table thead th:first-child { text-align: left; }
+
+.gpa-summary-table td:first-child {
+  color: var(--muted);
+  font-size: 12px;
+  width: 38%;
+}
+
+.gpa-summary-table td:not(:first-child) { text-align: center; }
+
+.gpa-summary-table tr:last-child td { border-bottom: none; }
+
+.gpa-delta-up { color: #4ade80; font-weight: 700; }
+.gpa-delta-down { color: #f87171; font-weight: 700; }
+.gpa-delta-eq { color: var(--muted); }
+
+.gpa-summary-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gpa-plan-msg {
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.gpa-plan-msg b { color: var(--text); }
+.gpa-status-ok { color: #4ade80; font-weight: 600; }
+.gpa-status-warn { color: #f87171; }
+
+.gpa-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gpa-reset-btn {
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #f87171;
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.gpa-reset-btn:hover {
+  background: rgba(248, 113, 113, 0.28);
+}
+
+.gpa-score-input.has-override {
+  border-color: rgba(96, 165, 250, 0.6);
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+  font-weight: 600;
+}
+
 .gpa-head-title {
   font-size: 18px;
   font-weight: 700;
@@ -838,6 +940,110 @@ button[disabled] {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.gpa-target-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gpa-target-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.gpa-custom-select {
+  position: relative;
+  display: inline-block;
+}
+
+.gpa-custom-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  padding: 5px 10px 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.gpa-custom-select-btn::after {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--muted);
+  margin-left: 4px;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.gpa-custom-select.open .gpa-custom-select-btn {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.gpa-custom-select.open .gpa-custom-select-btn::after {
+  transform: rotate(180deg);
+}
+
+.gpa-custom-select-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 180px;
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin: 0;
+  list-style: none;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: none;
+  animation: dropdown-in 0.12s ease;
+}
+
+.gpa-custom-select.open .gpa-custom-select-list {
+  display: block;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.gpa-custom-select-list li {
+  padding: 7px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.gpa-custom-select-list li:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gpa-custom-select-list li.selected {
+  background: rgba(99, 179, 237, 0.15);
+  color: #93c5fd;
+  font-weight: 700;
 }
 
 .gpa-semester {
@@ -868,6 +1074,30 @@ button[disabled] {
   font-size: 12px;
 }
 
+.gpa-sem-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gpa-sem-current-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.gpa-score-input.is-pending-input::placeholder {
+  color: rgba(147, 197, 253, 0.5);
+  font-style: italic;
+}
+
 .gpa-panel table {
   width: 100%;
   table-layout: fixed;
@@ -892,11 +1122,11 @@ button[disabled] {
   background: rgba(0, 0, 0, 0.2);
 }
 
-.gpa-col-name { width: 42%; text-align: left; }
-.gpa-col-tc { width: 10%; text-align: center; }
-.gpa-col-letter { width: 14%; text-align: center; }
-.gpa-col-score { width: 14%; text-align: center; }
-.gpa-col-suggest { width: 20%; text-align: center; }
+.gpa-col-name { width: 40%; text-align: left; }
+.gpa-col-tc { width: 8%; text-align: center; }
+.gpa-col-letter { width: 12%; text-align: center; }
+.gpa-col-score { width: 22%; text-align: center; }
+.gpa-col-suggest { width: 18%; text-align: center; }
 
 .gpa-cell-center { text-align: center; }
 
@@ -906,7 +1136,7 @@ button[disabled] {
   justify-content: center;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-weight: 700;
   font-size: 12px;
   background: rgba(255, 255, 255, 0.08);
@@ -922,7 +1152,7 @@ button[disabled] {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
   font-weight: 700;
@@ -939,6 +1169,10 @@ button[disabled] {
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .gpa-tag-pending {
@@ -951,6 +1185,25 @@ button[disabled] {
   font-size: 11px;
   font-weight: 500;
   border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.gpa-score-input {
+  width: 52px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  color: inherit;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: center;
+  padding: 2px 4px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.gpa-score-input:focus {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.11);
 }
 
 #btn-gpa.active {
@@ -978,6 +1231,15 @@ button[disabled] {
   background: #ffffff;
   color: var(--text);
   border: 1px solid rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .gpa-score-input {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: var(--text);
+}
+[data-theme="light"] .gpa-score-input:focus {
+  border-color: var(--accent);
+  background: #ffffff;
 }
 [data-theme="light"] .gpa-semester {
   background: #ffffff;
