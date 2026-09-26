@@ -19,12 +19,6 @@ function weekKey(date = new Date()) {
   return formatYMDLocal(startOfWeek(date));
 }
 
-console.log("[preload] injected successfully");
-
-async function getUserDataPath() {
-  return ipcRenderer.invoke("get-userData-path");
-}
-
 contextBridge.exposeInMainWorld("scheduleAPI", {
   load: async (isoDate) => {
     return ipcRenderer.invoke("schedule:load-file", isoDate);
@@ -59,6 +53,8 @@ contextBridge.exposeInMainWorld("academicAPI", {
   refresh: () => ipcRenderer.invoke("academic:refresh"),
   plan: (target) => ipcRenderer.invoke("gpa:plan", target),
   simulate: (overrides) => ipcRenderer.invoke("gpa:simulate", overrides),
+  customPlan: (target, selectedKeys, targetGradeOverrides) =>
+    ipcRenderer.invoke("gpa:custom-plan", target, selectedKeys, targetGradeOverrides),
 });
 
 contextBridge.exposeInMainWorld("dateAPI", {
