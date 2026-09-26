@@ -8,6 +8,7 @@ import {
   deleteAllSchedules,
 } from "./scheduleDb.js";
 import { CONFIG } from "../config.js";
+import { API_FIELDS } from "../constants.js";
 import { logger } from "../utils/logger.js";
 
 const inFlightRequests = new Map();
@@ -133,8 +134,8 @@ async function executeGetSchedule(offset = 0, baseDate = null) {
     throw createAuthError("No student logged in. Please log in first.");
   }
 
-  const scheduleUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?TC_SV_KetQuaHocTap_MaSinhVien=${encodeURIComponent(studentId)}`;
-  const examUrl = `${CONFIG.UNETI_EXAM_ENDPOINT}?TC_SV_KetQuaHocTap_MaSinhVien=${encodeURIComponent(studentId)}`;
+  const scheduleUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
+  const examUrl = `${CONFIG.UNETI_EXAM_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
 
   try {
     const [schedJson, examJson] = await Promise.all([

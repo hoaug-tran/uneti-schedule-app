@@ -38,7 +38,7 @@ import { closeDatabase, loadScheduleAsync } from "../app/fetcher/scheduleDb.js";
 import { isAuthError } from "../app/fetcher/sessionState.js";
 import { getAcademicResults } from "../app/fetcher/getAcademicResults.js";
 import { loadAcademicResults } from "../app/fetcher/academicDb.js";
-import { planGpa, simulateGpa } from "../app/utils/gpa.js";
+import { planGpa, simulateGpa, solveCustomGpaPlan } from "../app/utils/gpa.js";
 import { weekKey } from "../app/utils/date.js";
 import { i18nInstance as i18n } from "../app/utils/i18n.js";
 
@@ -70,6 +70,8 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
+
+app.setAppUserModelId("com.uneti.schedulewidget");
 
 let tray, win;
 let loginRequiredInFlight = false;
@@ -166,6 +168,17 @@ ipcMain.handle("gpa:simulate", async (_, overrides) => {
   }
 });
 
+ipcMain.handle("gpa:custom-plan", async (_, target, selectedKeys, targetGradeOverrides) => {
+  try {
+    const data = await loadAcademicResults();
+    if (!data?.subjects?.length) return { ok: false, error: "No academic results" };
+    return { ok: true, data: solveCustomGpaPlan(data.subjects, target, selectedKeys, targetGradeOverrides) };
+  } catch (err) {
+    logger.warn(`[gpa:custom-plan] fail: ${err?.message}`);
+    return { ok: false, error: err?.message || String(err) };
+  }
+});
+
 ipcMain.handle("widget:refresh", async () => {
   try {
     logger.debug("[IPC] widget:refresh");
@@ -199,7 +212,27 @@ ipcMain.handle("widget:refresh", async () => {
   }
 });
 
-ipcMain.handle("widget:hide", () => win?.hide());
+let hasShownMinimizeBalloon = false;
+try {
+  hasShownMinimizeBalloon = Boolean(store.get("hasShownMinimizeBalloon"));
+} catch {}
+
+ipcMain.handle("widget:hide", () => {
+  if (win && !win.isDestroyed()) {
+    win.hide();
+    if (tray && !hasShownMinimizeBalloon) {
+      hasShownMinimizeBalloon = true;
+      try {
+        store.set("hasShownMinimizeBalloon", true);
+      } catch {}
+      tray.displayBalloon({
+        iconType: "info",
+        title: "Widget lịch học UNETI",
+        content: "Ứng dụng đã được thu nhỏ xuống khay hệ thống (System Tray). Bấm vào biểu tượng để mở lại.",
+      });
+    }
+  }
+});
 ipcMain.handle("widget:quit", () => {
   app.isQuitting = true;
   app.removeAllListeners("window-all-closed");
@@ -263,63 +296,73 @@ ipcMain.handle("widget:logout", async () => {
   }
 });
 
-ipcMain.handle("app:check-update", async () => {
+let inFlightUpdateCheck = null;
+
+async function checkForUpdatesSafe() {
+  if (inFlightUpdateCheck) {
+    return inFlightUpdateCheck;
+  }
+
   const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
 
   if (isDev) {
     const mockState = process.env.MOCK_UPDATE;
-
-    if (mockState === 'available') {
+    if (mockState === "available") {
       logger.debug("[mock] Simulating update available");
       return { update: true, version: "1.6.0" };
-    } else if (mockState === 'error') {
+    } else if (mockState === "error") {
       logger.debug("[mock] Simulating update error");
       return { error: "Network error" };
     }
-
     logger.debug("[mock] skip checkForUpdates (dev mode)");
     return { update: false, version: app.getVersion() };
   }
 
-  logger.info("[autoUpdater] Checking for updates...");
-  const timeoutMs = 10000;
+  inFlightUpdateCheck = (async () => {
+    logger.info("[autoUpdater] Checking for updates...");
+    const timeoutMs = 10000;
+    const withTimeout = (promise, ms) =>
+      Promise.race([
+        promise,
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                timeout: true,
+              }),
+            ms
+          )
+        ),
+      ]);
 
-  const withTimeout = (promise, ms) =>
-    Promise.race([
-      promise,
-      new Promise((resolve) =>
-        setTimeout(
-          () =>
-            resolve({
-              timeout: true,
-            }),
-          ms
-        )
-      ),
-    ]);
-
-  try {
-    const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
-
-    if (result.timeout) {
-      logger.warn("[autoUpdater] checkForUpdates() timed out");
-      return { error: "Request timed out" };
+    try {
+      const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
+      if (result?.timeout) {
+        logger.warn("[autoUpdater] checkForUpdates() timed out");
+        return { error: "Request timed out" };
+      }
+      if (
+        result?.updateInfo?.version &&
+        result.updateInfo.version !== app.getVersion()
+      ) {
+        logger.info(`[autoUpdater] Update available: ${result.updateInfo.version}`);
+        return { update: true, version: result.updateInfo.version };
+      }
+      logger.info("[autoUpdater] No update available");
+      return { update: false, version: app.getVersion() };
+    } catch (e) {
+      logger.error(`[autoUpdater] check update error: ${e?.message}`, { stack: e?.stack });
+      return { error: e?.message ?? String(e) };
+    } finally {
+      inFlightUpdateCheck = null;
     }
+  })();
 
-    if (
-      result?.updateInfo?.version &&
-      result.updateInfo.version !== app.getVersion()
-    ) {
-      logger.info(`[autoUpdater] Update available: ${result.updateInfo.version}`);
-      return { update: true, version: result.updateInfo.version };
-    }
+  return inFlightUpdateCheck;
+}
 
-    logger.info("[autoUpdater] No update available");
-    return { update: false, version: app.getVersion() };
-  } catch (e) {
-    logger.error(`[autoUpdater] check update error: ${e?.message}`, { stack: e?.stack });
-    return { error: e?.message ?? String(e) };
-  }
+ipcMain.handle("app:check-update", async () => {
+  return await checkForUpdatesSafe();
 });
 
 ipcMain.handle("app:install-update", async () => {
@@ -503,12 +546,19 @@ autoUpdater.on("error", (err) => {
 function createWindow() {
   if (win && !win.isDestroyed()) return win;
 
+  const primary = screen.getPrimaryDisplay();
+  const { x: workX, y: workY, width: workW, height: workH } = primary.workArea;
+  const initialX = Math.round(workX + (workW - CONFIG.WINDOW_DEFAULT_WIDTH) / 2);
+  const initialY = Math.round(workY + (workH - CONFIG.WINDOW_DEFAULT_HEIGHT) / 2);
+
   win = new BrowserWindow({
     width: CONFIG.WINDOW_DEFAULT_WIDTH,
     height: CONFIG.WINDOW_DEFAULT_HEIGHT,
     maxWidth: CONFIG.WINDOW_DEFAULT_WIDTH,
     maxHeight: CONFIG.WINDOW_MAX_HEIGHT,
     minHeight: CONFIG.WINDOW_MIN_HEIGHT,
+    x: initialX,
+    y: initialY,
     show: true,
     backgroundColor: "#141414",
     frame: false,
@@ -540,6 +590,14 @@ function createWindow() {
       }
     });
   }
+
+  win.webContents.on("console-message", (event, level, message, line, sourceId) => {
+    logger.info(`[renderer console] [${level}] ${message} (${sourceId}:${line})`);
+  });
+
+  win.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+    logger.error(`[renderer did-fail-load] ${errorCode}: ${errorDescription} (${validatedURL})`);
+  });
 
   win.webContents.on("did-finish-load", () => {
     logger.debug("[main] did-finish-load");
@@ -793,30 +851,12 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       try {
         logger.info("[autoUpdater] Checking for updates on startup");
-        const timeoutMs = 10000;
-        const withTimeout = (promise, ms) =>
-          Promise.race([
-            promise,
-            new Promise((resolve) =>
-              setTimeout(() => resolve({ timeout: true }), ms)
-            ),
-          ]);
-
-        const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
-
-        if (result?.timeout) {
-          logger.warn("[autoUpdater] Startup check timed out after 10s");
-          return;
-        }
-
-        if (
-          result?.updateInfo?.version &&
-          result.updateInfo.version !== app.getVersion()
-        ) {
-          logger.info(`[autoUpdater] Update available on startup: v${result.updateInfo.version}`);
+        const result = await checkForUpdatesSafe();
+        if (result?.update && result?.version) {
+          logger.info(`[autoUpdater] Update available on startup: v${result.version}`);
           win?.webContents.send(
             "toast-update",
-            `New update available (v${result.updateInfo.version}). Click to update.`
+            `New update available (v${result.version}). Click to update.`
           );
         } else {
           logger.info("[autoUpdater] No update available on startup");
@@ -831,28 +871,9 @@ app.whenReady().then(async () => {
       if (isStillEnabled) {
         try {
           logger.info("[autoUpdater] Periodic update check (6h interval)");
-
-          const timeoutMs = 10000;
-          const withTimeout = (promise, ms) =>
-            Promise.race([
-              promise,
-              new Promise((resolve) =>
-                setTimeout(() => resolve({ timeout: true }), ms)
-              ),
-            ]);
-
-          const result = await withTimeout(autoUpdater.checkForUpdates(), timeoutMs);
-
-          if (result?.timeout) {
-            logger.warn("[autoUpdater] Periodic check timed out after 10s");
-            return;
-          }
-
-          if (
-            result?.updateInfo?.version &&
-            result.updateInfo.version !== app.getVersion()
-          ) {
-            logger.info(`[autoUpdater] Update available (periodic): v${result.updateInfo.version}`);
+          const result = await checkForUpdatesSafe();
+          if (result?.update && result?.version) {
+            logger.info(`[autoUpdater] Update available (periodic): v${result.version}`);
           } else {
             logger.info("[autoUpdater] No update available (periodic)");
           }

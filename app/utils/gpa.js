@@ -1,38 +1,35 @@
-const TARGETS = { excellent: 3.6, good: 3.2, fair: 2.5 };
-const LETTER_POINTS = { "A+": 4, A: 4, "B+": 3.5, B: 3, "C+": 2.5, C: 2, "D+": 1.5, D: 1, F: 0 };
-const GRADE_BANDS = [
-  [8.5, 4, "A"],
-  [7.8, 3.5, "B+"],
-  [7, 3, "B"],
-  [6.3, 2.5, "C+"],
-  [5.5, 2, "C"],
-  [4.8, 1.5, "D+"],
-  [4, 1, "D"],
-  [0, 0, "F"],
-];
-
-function numberOf(value) {
-  if (typeof value === "number") return value;
-  const parsed = Number.parseFloat(String(value ?? "").trim().replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : null;
-}
+import {
+  GPA_TARGETS,
+  LETTER_POINTS,
+  GRADE_BANDS,
+  RANK_THRESHOLDS,
+  NON_GPA_SUBJECT_PATTERNS,
+} from "../constants.js";
+import { numberOf, courseKeyOf } from "./format.js";
 
 function creditsOf(row) {
   return numberOf(row?.credits ?? row?.soTinChi ?? row?.tinChi);
-}
-
-function courseKeyOf(row) {
-  return String(row?.courseId ?? row?.maHocPhan ?? row?.subjectId ?? row?.maMonHoc ?? row?.subjectCode ?? row?.code ?? "").trim().toLowerCase();
 }
 
 function sourceIndexOf(row, fallback) {
   return Number.isInteger(row?.sourceIndex) ? row.sourceIndex : fallback;
 }
 
+export function rankOf(gpa4) {
+  if (gpa4 === null || gpa4 === undefined) return "";
+  const score = numberOf(gpa4);
+  if (score === null) return "";
+  const rounded = Math.round((score + Number.EPSILON) * 100) / 100;
+  const matched = RANK_THRESHOLDS.find((item) => rounded >= item.min);
+  return matched ? matched.rank : "Yếu";
+}
+
 export function gradeOfScore10(value) {
   const score = numberOf(value);
   if (score === null || score < 0 || score > 10) return null;
-  const [, point, letter] = GRADE_BANDS.find(([minimum]) => score >= minimum);
+  const match = GRADE_BANDS.find(([minimum]) => score >= minimum);
+  if (!match) return null;
+  const [, point, letter] = match;
   return { score, point, letter };
 }
 
@@ -45,7 +42,30 @@ export function gradePointOf(row) {
 }
 
 export function isGpaSubject(row) {
-  return !(row?.excludedFromGpa === true || row?.khongTinhDiemTBC === true || Number(row?.khongTinhDiemTBC) === 1);
+  if (!row) return false;
+  if (row.excludedFromGpa === true) return false;
+  const khongTinh = row.khongTinhDiemTBC;
+  if (
+    khongTinh === true ||
+    khongTinh === 1 ||
+    khongTinh === "1" ||
+    String(khongTinh).toLowerCase() === "true"
+  ) {
+    return false;
+  }
+  if (row.isTinhTBC === false || row.isTinhTBC === 0 || row.isTinhTBC === "0") {
+    return false;
+  }
+  const credits = creditsOf(row);
+  if (credits !== null && credits <= 0) return false;
+  const subjectName = String(row.subjectName ?? row.name ?? row.tenMonHoc ?? "").trim();
+  const subjectCode = String(row.courseId ?? row.subjectId ?? row.subjectCode ?? "").trim();
+  for (const pattern of NON_GPA_SUBJECT_PATTERNS) {
+    if (pattern.test(subjectName) || pattern.test(subjectCode)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function deduplicateGpaSubjects(subjects = [], overrides = {}) {
@@ -112,22 +132,44 @@ export function simulateGpa(subjects = [], overrides = {}) {
 }
 
 function targetOf(targetKey) {
-  const target = TARGETS[targetKey] ?? numberOf(targetKey);
+  const target = GPA_TARGETS[targetKey] ?? numberOf(targetKey);
   if (target === null || target < 0 || target > 4) throw new Error("Invalid GPA target");
   return target;
 }
 
+const IMPROVEMENT_GRADES = [
+  { point: 4.0, letter: "A" },
+  { point: 3.5, letter: "B+" },
+  { point: 3.0, letter: "B" },
+];
+
 function candidatesOf(subject) {
-  return GRADE_BANDS
-    .map(([, point, letter]) => ({ point, letter, gain: Math.round((point - subject.point) * subject.credit * 2) }))
-    .filter((candidate) => candidate.gain > 0);
+  return IMPROVEMENT_GRADES
+    .filter((candidate) => candidate.point > subject.point)
+    .map((candidate) => ({
+      point: candidate.point,
+      letter: candidate.letter,
+      gain: Math.round((candidate.point - subject.point) * subject.credit * 2),
+    }));
 }
 
 export function planGpa(subjects = [], targetKey) {
   const target = targetOf(targetKey);
   const base = calculateGpa(subjects);
   const requiredGain = Math.ceil(Math.max(0, target * base.credits - base.gpa * base.credits) * 2 - 1e-9);
-  if (!requiredGain) return { target, credits: base.credits, gpa: base.gpa, achieved: true, possible: true, suggestions: [], equivalentGroups: [] };
+  if (!requiredGain) {
+    return {
+      target,
+      credits: base.credits,
+      gpa: base.gpa,
+      achieved: true,
+      possible: true,
+      customMode: false,
+      suggestions: [],
+      equivalentGroups: [],
+      projectedGpa: base.gpa,
+    };
+  }
 
   let states = new Map([[0, []]]);
   for (const subject of base.subjects) {
@@ -144,7 +186,20 @@ export function planGpa(subjects = [], targetKey) {
   }
 
   const viable = [...states.entries()].filter(([gain]) => gain >= requiredGain);
-  if (!viable.length) return { target, credits: base.credits, gpa: base.gpa, achieved: false, possible: false, suggestions: [], equivalentGroups: [] };
+  if (!viable.length) {
+    return {
+      target,
+      credits: base.credits,
+      gpa: base.gpa,
+      achieved: false,
+      possible: false,
+      customMode: false,
+      suggestions: [],
+      equivalentGroups: [],
+      projectedGpa: base.gpa,
+    };
+  }
+
   viable.sort(([gainA, choicesA], [gainB, choicesB]) => choicesA.length - choicesB.length || gainA - gainB);
   const [gain, choices] = viable[0];
   const suggestions = choices.map(({ subject, point, letter }) => ({
@@ -156,6 +211,7 @@ export function planGpa(subjects = [], targetKey) {
     point: subject.point,
     improveTo: letter,
     improveToPoint: point,
+    isCustom: false,
   }));
   const projectedGpa = (base.gpa * base.credits + gain / 2) / base.credits;
   const equivalentGroups = suggestions.map((suggestion) => ({
@@ -165,10 +221,176 @@ export function planGpa(subjects = [], targetKey) {
       .filter((subject) => Math.round((suggestion.improveToPoint - subject.point) * subject.credit * 2) === Math.round((suggestion.improveToPoint - suggestion.point) * suggestion.credit * 2))
       .map((subject) => ({ index: subject.sourceIndex, key: subject.courseKey, subjectCode: subject.courseId ?? subject.subjectCode ?? "", subjectName: subject.subjectName ?? subject.name ?? "" })),
   })).filter((group) => group.alternatives.length);
-  return { target, credits: base.credits, gpa: base.gpa, achieved: false, possible: true, suggestions, equivalentGroups, projectedGpa };
+
+  return {
+    target,
+    credits: base.credits,
+    gpa: base.gpa,
+    achieved: false,
+    possible: true,
+    customMode: false,
+    suggestions,
+    equivalentGroups,
+    projectedGpa,
+  };
 }
 
-if (process.argv.includes("--self-check")) {
+export function solveCustomGpaPlan(subjects = [], targetKey = "good", selectedKeys = [], targetGradeOverrides = {}) {
+  const target = targetOf(targetKey);
+  const base = calculateGpa(subjects);
+  const requiredGain = Math.ceil(Math.max(0, target * base.credits - base.gpa * base.credits) * 2 - 1e-9);
+
+  if (!requiredGain) {
+    return {
+      target,
+      credits: base.credits,
+      gpa: base.gpa,
+      achieved: true,
+      possible: true,
+      customMode: Array.isArray(selectedKeys) && selectedKeys.length > 0,
+      suggestions: [],
+      projectedGpa: base.gpa,
+      deficit: 0,
+      additionalCreditsNeeded: 0,
+    };
+  }
+
+  if (Array.isArray(selectedKeys) && selectedKeys.length === 0) {
+    const additionalCreditsNeeded = Math.ceil(requiredGain / (2 * 2.0));
+    return {
+      target,
+      credits: base.credits,
+      gpa: base.gpa,
+      achieved: requiredGain <= 0,
+      possible: requiredGain <= 0,
+      customMode: true,
+      suggestions: [],
+      projectedGpa: base.gpa,
+      deficit: requiredGain / 2,
+      additionalCreditsNeeded,
+    };
+  }
+
+  const normalizedKeys = new Set((selectedKeys || []).map((k) => String(k).trim().toLowerCase()).filter(Boolean));
+  if (normalizedKeys.size === 0) {
+    return planGpa(subjects, targetKey);
+  }
+
+  const selectedSubjects = base.subjects.filter((s) => normalizedKeys.has(s.courseKey));
+  if (!selectedSubjects.length) {
+    const additionalCreditsNeeded = Math.ceil(requiredGain / (2 * 2.0));
+    return {
+      target,
+      credits: base.credits,
+      gpa: base.gpa,
+      achieved: requiredGain <= 0,
+      possible: requiredGain <= 0,
+      customMode: true,
+      suggestions: [],
+      projectedGpa: base.gpa,
+      deficit: requiredGain / 2,
+      additionalCreditsNeeded,
+    };
+  }
+
+  let states = new Map([[0, []]]);
+  for (const subject of selectedSubjects) {
+    const next = new Map();
+    const explicitGrade = targetGradeOverrides[subject.courseKey];
+    let candidates = candidatesOf(subject);
+    if (explicitGrade && LETTER_POINTS[explicitGrade] !== undefined) {
+      const p = LETTER_POINTS[explicitGrade];
+      if (p > subject.point) {
+        candidates = [{ point: p, letter: explicitGrade, gain: Math.round((p - subject.point) * subject.credit * 2) }];
+      }
+    }
+    if (!candidates.length) {
+      for (const [gain, choices] of states) {
+        next.set(gain, [...choices, { subject, point: subject.point, letter: subject.letter, gain: 0 }]);
+      }
+    } else {
+      for (const [gain, choices] of states) {
+        for (const candidate of candidates) {
+          const totalGain = gain + candidate.gain;
+          const nextChoices = [...choices, { subject, ...candidate }];
+          const existing = next.get(totalGain);
+          if (!existing || nextChoices.length < existing.length) {
+            next.set(totalGain, nextChoices);
+          }
+        }
+      }
+    }
+    states = next;
+  }
+
+  const viable = [...states.entries()].filter(([gain]) => gain >= requiredGain);
+  if (viable.length > 0) {
+    viable.sort(([gainA, choicesA], [gainB, choicesB]) => {
+      const sumPointsA = choicesA.reduce((sum, c) => sum + c.point, 0);
+      const sumPointsB = choicesB.reduce((sum, c) => sum + c.point, 0);
+      return sumPointsA - sumPointsB || gainA - gainB;
+    });
+    const [gain, choices] = viable[0];
+    const suggestions = choices.map(({ subject, point, letter }) => ({
+      index: subject.sourceIndex,
+      key: subject.courseKey,
+      subjectCode: subject.courseId ?? subject.subjectCode ?? "",
+      subjectName: subject.subjectName ?? subject.name ?? "",
+      credit: subject.credit,
+      point: subject.point,
+      improveTo: letter,
+      improveToPoint: point,
+      isCustom: true,
+    }));
+    const projectedGpa = (base.gpa * base.credits + gain / 2) / base.credits;
+    return {
+      target,
+      credits: base.credits,
+      gpa: base.gpa,
+      achieved: false,
+      possible: true,
+      customMode: true,
+      suggestions,
+      projectedGpa,
+      deficit: 0,
+      additionalCreditsNeeded: 0,
+    };
+  }
+
+  const maxEntry = [...states.entries()].sort(([gainA], [gainB]) => gainB - gainA)[0];
+  const maxGain = maxEntry ? maxEntry[0] : 0;
+  const bestChoices = maxEntry ? maxEntry[1] : [];
+  const suggestions = bestChoices.map(({ subject, point, letter }) => ({
+    index: subject.sourceIndex,
+    key: subject.courseKey,
+    subjectCode: subject.courseId ?? subject.subjectCode ?? "",
+    subjectName: subject.subjectName ?? subject.name ?? "",
+    credit: subject.credit,
+    point: subject.point,
+    improveTo: letter,
+    improveToPoint: point,
+    isCustom: true,
+  }));
+
+  const projectedGpa = (base.gpa * base.credits + maxGain / 2) / base.credits;
+  const deficitGain = requiredGain - maxGain;
+  const additionalCreditsNeeded = Math.ceil(deficitGain / (2 * 2.0));
+
+  return {
+    target,
+    credits: base.credits,
+    gpa: base.gpa,
+    achieved: false,
+    possible: false,
+    customMode: true,
+    suggestions,
+    projectedGpa,
+    deficit: deficitGain / 2,
+    additionalCreditsNeeded,
+  };
+}
+
+if (typeof process !== "undefined" && Array.isArray(process?.argv) && process.argv.includes("--self-check")) {
   console.assert(gradeOfScore10(8.5)?.point === 4, "8.5 must map to A");
   console.assert(gradeOfScore10(7.8)?.point === 3.5, "7.8 must map to B+");
   console.assert(gradeOfScore10(4)?.point === 1, "4.0 must map to D");
@@ -177,10 +399,13 @@ if (process.argv.includes("--self-check")) {
     { courseId: "a", credits: 3, finalScore: 8.5 },
     { courseId: "b", credits: 2, finalScore: 7, excludedFromGpa: true },
     { courseId: "c", credits: 2, finalScore: 5.5 },
+    { courseId: "d", credits: 3, finalScore: 4, subjectName: "Giáo dục thể chất 1" },
   ];
   const result = calculateGpa(rows);
   console.assert(result.credits === 5 && Math.abs(result.gpa - 3.2) < 0.001, "attempt or exclusion rule failed");
   const plan = planGpa(rows, 3.6);
   console.assert(plan.possible && plan.suggestions.length === 1 && plan.suggestions[0].improveTo === "B", "minimum plan failed");
+  const customPlan = solveCustomGpaPlan(rows, 3.6, ["c"]);
+  console.assert(customPlan.customMode && customPlan.suggestions[0].key === "c", "custom plan selection failed");
   console.log("gpa self-check ok");
 }

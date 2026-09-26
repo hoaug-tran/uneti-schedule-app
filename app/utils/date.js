@@ -24,6 +24,19 @@ export function weekKey(date = new Date()) {
   return formatYMDLocal(startOfWeek(date));
 }
 
+export function getWeekDays(firstDay, lastDay) {
+  const days = [];
+  const d = new Date(firstDay);
+  while (d <= lastDay) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    days.push(`${yyyy}-${mm}-${dd}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
 export const periodsTime = {
   1: ["07:00", "07:45"],
   2: ["07:50", "08:35"],
@@ -38,3 +51,21 @@ export const periodsTime = {
   11: ["15:50", "16:35"],
   12: ["16:40", "17:25"],
 };
+
+export function periodSpan(p = []) {
+  if (!Array.isArray(p) || p.length === 0) return "";
+  return p.length > 1 ? `${p[0]} - ${p[p.length - 1]}` : `${p[0]}`;
+}
+
+export function periodTime(p = []) {
+  if (!Array.isArray(p) || p.length === 0) return "";
+  const a = periodsTime[p[0]]?.[0];
+  const b = periodsTime[p[p.length - 1]]?.[1];
+  return a && b ? `${a} - ${b}` : "";
+}
+
+export function cleanRoom(room = "") {
+  return String(room)
+    .replace(/^Phòng học\//i, "")
+    .replace(/^Phòng hiệu năng cao\s*/i, "");
+}

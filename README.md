@@ -27,12 +27,27 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 </p>
 <p align="center"><i>Lịch thi</i></p>
 
+<p align="center">
+  <img src="assets/img/gpa.png" width="100%" />
+</p>
+<p align="center"><i>Bảng điểm và GPA</i></p>
+
+<p align="center">
+  <img src="assets/img/aim.png" width="100%" />
+</p>
+<p align="center"><i>Mô phỏng điểm GPA & biến động xếp loại</i></p>
+
+<p align="center">
+  <img src="assets/img/suggest.png" width="100%" />
+</p>
+<p align="center"><i>Gợi ý môn cần cải thiện điểm số để đạt mục tiêu</i></p>
+
 ## Tính năng chính
 
 - Hiển thị lịch học theo tuần
 - Tự động làm mới: tuần hiện tại mỗi 1 giờ, tuần sau mỗi 6 giờ
 - Hoạt động offline (dùng lịch đã lưu)
-- Tính toán & Lập kế hoạch GPA: Tự động load bảng điểm, tính GPA hệ 4 và tự đưa ra gợi ý cải thiện điểm số để đạt mục tiêu (Xuất sắc, Giỏi, Khá).
+- Tính toán & Lập kế hoạch GPA: Tự động load bảng điểm, tính GPA hệ 4 & hệ 10 chuẩn xác. Hỗ trợ mô phỏng điểm số 2 chiều (nhập điểm số dự kiến hoặc chọn điểm chữ mục tiêu A/B+/B/C/D), thuật toán thông minh tự động gợi ý số môn ít nhất cần cải thiện để đạt mục tiêu (Xuất sắc, Giỏi, Khá). Tự động nhận diện kỳ đang học và loại trừ các môn không tính GPA (Thể chất, Quốc phòng...).
 - Dark/Light theme
 - Tiếng Việt/English
 - Tray icon để truy cập nhanh
@@ -86,11 +101,11 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 
 <p align="center">
   Kết quả quét VirusTotal tại thời điểm phát hành
-  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.5.2">
-    v1.5.2
+  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.9.0">
+    v1.9.0
   </a>
-  – 0/68 engine phát hiện mã độc<br/>
-  <a href="https://www.virustotal.com/gui/file/9ca935345e7f32c072323bf41df0001567243c2bd1adb95f0423530ef061bb58" target="_blank">
+  – 0/62 engine phát hiện mã độc<br/>
+  <a href="https://www.virustotal.com/gui/file/e57b5abf15654cea6dc2179dcf7e0cbe02eaf8f8febb50c9df2d8148c298091a?nocache=1" target="_blank">
     Xem chi tiết trên VirusTotal
   </a>
 </p>
@@ -111,9 +126,11 @@ Sau khi đăng nhập, lịch sẽ tự động hiển thị. Dùng nút "← Tr
 ### Xem & Lập kế hoạch GPA
 
 1. Click vào nút **GPA** trên thanh điều hướng.
-2. Hệ thống sẽ tự động load kết quả học tập chính thức từ trang sinh viên UNETI và tính toán GPA hệ 4 (theo kỳ và toàn khóa).
-3. Chọn mục tiêu xếp loại mong muốn (như **Xuất sắc $\ge 3.60$**, **Giỏi $\ge 3.20$**, **Khá $\ge 2.50$**). Hệ thống sẽ phân tích và đưa ra gợi ý thông minh (ví dụ: _Cần cải thiện lên điểm A cho 2 môn để đạt mục tiêu_).
-4. Các môn không tính GPA (như Thể dục, Quốc phòng, kiểm tra Tiếng Anh đầu vào TOEIC...) được nhận diện và tự phân loại là không tính vào GPA.
+2. Hệ thống sẽ tự động load kết quả học tập chính thức từ trang sinh viên UNETI và tính toán GPA hệ 4, hệ 10 (theo kỳ và toàn khóa). Kỳ đang học được tự động nhận diện và hiển thị số tín chỉ đăng ký cùng danh sách môn chờ điểm thi.
+3. **Chọn mục tiêu**: Chọn xếp loại mong muốn (**Xuất sắc $\ge 3.60$**, **Giỏi $\ge 3.20$**, **Khá $\ge 2.50$**).
+4. **Gợi ý tự động**: Bấm nút **Gợi ý tự động** (✨), hệ thống sẽ phân tích và tự động chọn số môn ít nhất cần nâng lên điểm A để đạt xếp loại mục tiêu.
+5. **Mô phỏng tùy chỉnh**: Bạn có thể tự chọn mục tiêu (A, B+, B, C, D) cho từng môn ở cột **Mục tiêu**, hoặc gõ thẳng điểm số vào ô **Dự kiến ✎**. Cả hai sẽ tự đồng bộ 2 chiều theo thời gian thực và cập nhật ngay lập tức bảng tổng kết GPA bên trên. Bấm **Đặt lại** để quay về điểm thực tế ban đầu bất cứ lúc nào.
+6. Các môn không tính GPA (như Thể dục, Quốc phòng, kiểm tra Tiếng Anh đầu vào TOEIC...) được nhận diện và tự phân loại riêng, không ảnh hưởng đến điểm tích lũy.
 
 ### Làm mới lịch
 
@@ -226,7 +243,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 4. Ghi đè lên bản cũ (không cần gỡ cài đặt trước)
 
 > [!NOTE]
-> Việc cài đặt phiên bản mới sẽ **không làm mất dữ liệu lịch hoặc thông tin đăng nhập**.
+> Việc cài đặt phiên bản mới sẽ **không làm mất dữ liệu lịch hoặc thông tin đăng nhập**.  
 > Nếu do dev thật, mình rất xin lỗi các bạn. Mình test kém quá.
 
 ### Ứng dụng không tự động khởi động
@@ -247,25 +264,25 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 
 ### Công nghệ sử dụng
 
-- Electron 33.2.1
+- Electron 38.x
 - JavaScript (ES Modules)
 - better-sqlite3 (database)
-- Cheerio (HTML parser)
 - Keytar (secure cookie storage)
+- Lucide Icons & Vanilla CSS
 
 ### Setup
 
 ```bash
 git clone https://github.com/hoaug-tran/uneti-schedule-app.git
 cd uneti-schedule-app
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 ### Build
 
 ```bash
-npm run build
+pnpm build
 ```
 
 File build sẽ nằm trong folder `dist/`.

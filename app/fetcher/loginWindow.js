@@ -53,7 +53,10 @@ export async function showLoginWindow(parent) {
       finished = true;
 
       try {
-        await new Promise((r) => setTimeout(r, 600));
+        if (win && !win.isDestroyed()) {
+          win.hide();
+        }
+        await new Promise((r) => setTimeout(r, 400));
 
         let userData = null;
         try {

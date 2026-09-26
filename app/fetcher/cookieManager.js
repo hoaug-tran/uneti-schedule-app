@@ -216,14 +216,20 @@ export function attachCookieAutoPersist() {
 
 export async function hasCookies() {
   try {
+    const partition = getCookiePartition();
+    const ses = session.fromPartition(partition);
+    const sesCookies = await ses.cookies.get({});
+    const filteredSes = sesCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+    if (filteredSes.length > 0) return true;
+
     const secure = await loadCookiesFromSecureStorage();
-    if (secure) return true;
+    if (Array.isArray(secure) && secure.length > 0) return true;
 
     const json = await loadCookiesFromJsonFile();
-    if (json) return true;
+    if (Array.isArray(json) && json.length > 0) return true;
 
     const txt = await loadCookieHeaderFromTxt();
-    if (txt) return true;
+    if (txt && txt.trim().length > 0) return true;
 
     return false;
   } catch {

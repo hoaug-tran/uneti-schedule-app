@@ -27,11 +27,27 @@ The app automatically refreshes class and exam schedules every hour to keep the 
 </p>
 <p align="center"><em>Exam schedule</em></p>
 
+<p align="center">
+  <img src="assets/img/gpa.png" width="100%" />
+</p>
+<p align="center"><em>Academic results & GPA summary</em></p>
+
+<p align="center">
+  <img src="assets/img/aim.png" width="100%" />
+</p>
+<p align="center"><em>GPA simulation & rank projection</em></p>
+
+<p align="center">
+  <img src="assets/img/suggest.png" width="100%" />
+</p>
+<p align="center"><em>Smart course recommendation to reach target</em></p>
+
 ## Main Features
 
 - Display weekly class schedule
 - Auto-refresh: current week every 1 hour, next week every 6 hours
 - Works offline (uses cached schedule)
+- GPA Calculation & Planning: Automatically load official grades, accurately compute 4.0 and 10.0 scale GPA. Real-time two-way simulation (enter projected scores or select target letter grades A/B+/B/C/D). Smart algorithm recommends the minimum courses needed to reach graduation goals (Excellent, Good, Fair). Automatically detects ongoing semesters and filters out GPA-exempt subjects (Physical Education, Defense Education...).
 - Dark/Light theme
 - Vietnamese/English
 - Tray icon for quick access
@@ -82,11 +98,11 @@ The app automatically refreshes class and exam schedules every hour to keep the 
 
 <p align="center">
   VirusTotal scan results at the time of release
-  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.5.2">
-    v1.5.2
+  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.9.0">
+    v1.9.0
   </a>
-  – 0/68 security engines detected malware.<br/>
-  <a href="https://www.virustotal.com/gui/file/9ca935345e7f32c072323bf41df0001567243c2bd1adb95f0423530ef061bb58" target="_blank">
+  – 0/62 security engines detected malware.<br/>
+  <a href="https://www.virustotal.com/gui/file/e57b5abf15654cea6dc2179dcf7e0cbe02eaf8f8febb50c9df2d8148c298091a?nocache=1" target="_blank">
     View the detailed VirusTotal report
   </a>
 </p>
@@ -103,6 +119,15 @@ First time opening the app will show login window. Enter your UNETI username/pas
 ### View Schedule
 
 After login, schedule will auto-display. Use "← Previous" and "Next →" buttons to navigate weeks.
+
+### GPA Calculation & Planning
+
+1. Click on the **GPA** button on the navigation bar.
+2. The app automatically fetches your official academic history from UNETI student portal and computes your 4.0 and 10.0 scale GPA (per semester and cumulative). Ongoing semesters display registered credits and pending courses.
+3. **Choose Target**: Select your desired academic honors goal (**Excellent $\ge 3.60$**, **Good $\ge 3.20$**, **Fair $\ge 2.50$**).
+4. **Auto Suggestion**: Click the **Auto Suggest** button (✨), and the algorithm will select the fewest courses that need an 'A' grade to achieve your target.
+5. **Custom Simulation**: You can customize target letter grades (A, B+, B, C, D) directly via the dropdown, or type projected scores in the **Projected ✎** input. Both fields synchronize in real-time, instantly updating the summary table above. Click **Reset** at any time to return to actual scores.
+6. Non-GPA subjects (such as Physical Education, Defense Education, TOEIC entrance tests...) are automatically classified and excluded from GPA calculation.
 
 ### Refresh Schedule
 
@@ -149,7 +174,6 @@ A: This application is built with Electron, so the installer needs to bundle:
 
 > The actual JavaScript code of the app is only about ~5–10MB.  
 > The large size is a common characteristic of Electron applications on Windows, not specific to this app.
-
 
 **Q: Where is data stored?**  
 A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Credential Manager.
@@ -231,25 +255,25 @@ The application does not update to a newer version automatically, or the update 
 
 ### Tech Stack
 
-- Electron 33.2.1
+- Electron 38.x
 - JavaScript (ES Modules)
 - better-sqlite3 (database)
-- Cheerio (HTML parser)
 - Keytar (secure cookie storage)
+- Lucide Icons & Vanilla CSS
 
 ### Setup
 
 ```bash
 git clone https://github.com/hoaug-tran/uneti-schedule-app.git
 cd uneti-schedule-app
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 ### Build
 
 ```bash
-npm run build
+pnpm build
 ```
 
 Build files will be in `dist/` folder.
