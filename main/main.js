@@ -15,6 +15,7 @@ import {
   session,
   shell,
   dialog,
+  Notification,
 } from "electron";
 import AutoLaunch from "auto-launch";
 import pkg from "electron-updater";
@@ -41,6 +42,10 @@ import { loadAcademicResults } from "../app/fetcher/academicDb.js";
 import { planGpa, simulateGpa, solveCustomGpaPlan } from "../app/utils/gpa.js";
 import { weekKey } from "../app/utils/date.js";
 import { i18nInstance as i18n } from "../app/utils/i18n.js";
+import {
+  startClassReminderService,
+  stopClassReminderService,
+} from "../app/utils/classNotifier.js";
 
 import { logger } from "../app/utils/logger.js";
 import { store } from "../app/utils/store.js";
@@ -81,11 +86,23 @@ async function requireLogin(reason = "Session expired") {
   loginRequiredInFlight = true;
   try {
     logger.warn(`[auth] require login: ${reason}`);
-    const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
-    await clearAllCookies();
     stopCookieRefreshService();
+    stopClassReminderService();
     win?.webContents.send("login-required");
     win?.webContents.send("status", "Session expired, please login again.");
+
+    if (Notification.isSupported() && (!win || !win.isVisible() || !win.isFocused())) {
+      const iconPath = path.join(__dirname, "../app/assets/uneti.ico");
+      const notif = new Notification({
+        title: "Widget lịch học UNETI",
+        body: "Phiên đăng nhập đã hết hạn. Vui lòng mở widget để đăng nhập lại.",
+        icon: iconPath,
+      });
+      notif.on("click", () => {
+        showWindow();
+      });
+      notif.show();
+    }
   } finally {
     setTimeout(() => { loginRequiredInFlight = false; }, 3000);
   }
@@ -246,15 +263,15 @@ ipcMain.handle("widget:login", async () => {
     logger.debug("[IPC] widget:login window closed, cookies saved");
     startCookieRefreshService(() => requireLogin("Session expired in background refresh"));
 
-    logger.debug("[IPC] widget:login clearing schedules");
-    await clearAllSchedules();
-
     logger.debug("[IPC] widget:login fetching schedule");
     try {
       await getSchedule(0);
       logger.debug("[IPC] widget:login fetched offset 0");
       await getSchedule(1);
       logger.debug("[IPC] widget:login fetched offset 1");
+      getAcademicResults().catch((err) => {
+        logger.warn(`[widget:login] prefetch academic results failed: ${err?.message}`);
+      });
     } catch (e) {
       logger.warn(
         `[widget:login] getSchedule after login failed: ${e?.message || e}`
@@ -264,6 +281,19 @@ ipcMain.handle("widget:login", async () => {
     logger.debug("[IPC] widget:login sending status ready and login-success");
     win?.webContents.send("status", "Schedule ready");
     win?.webContents.send("login-success");
+
+    startClassReminderService({
+      getTodaySchedule: async () => {
+        const d = new Date();
+        const key = weekKey(d);
+        const schedule = await loadScheduleAsync(key);
+        return schedule?.data || [];
+      },
+      onNotificationClick: () => {
+        showWindow();
+      },
+      iconPath: path.join(__dirname, "../app/assets/uneti.ico"),
+    });
 
     if (win && !win.isDestroyed()) {
       win.show();
@@ -280,6 +310,7 @@ ipcMain.handle("widget:logout", async () => {
   try {
     logger.info("[IPC] widget:logout START");
     stopCookieRefreshService();
+    stopClassReminderService();
     const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
     const { clearUser } = await import("../app/fetcher/userStore.js");
     const { clearAcademicResults } = await import("../app/fetcher/academicDb.js");
@@ -288,6 +319,7 @@ ipcMain.handle("widget:logout", async () => {
     await clearUser();
     await clearAcademicResults();
     logger.info("[IPC] User logged out successfully");
+    win?.webContents.send("login-required");
     win?.webContents.send("reload");
     return { success: true };
   } catch (err) {
@@ -522,6 +554,18 @@ autoUpdater.on("update-downloaded", () => {
   downloading = false;
   if (stallTimer) clearTimeout(stallTimer);
   win?.webContents.send("update:downloaded");
+
+  if (Notification.isSupported() && (!win || !win.isVisible())) {
+    const notif = new Notification({
+      title: "Cập nhật mới",
+      body: "Bản cập nhật mới đã sẵn sàng. Nhấn để mở widget và áp dụng.",
+      icon: path.join(__dirname, "../app/assets/uneti.ico"),
+    });
+    notif.on("click", () => {
+      showWindow();
+    });
+    notif.show();
+  }
 
   win?.webContents.executeJavaScript(`sessionStorage.setItem('justUpdated', 'true')`).catch(() => { });
 });
@@ -814,21 +858,26 @@ app.whenReady().then(async () => {
 
       if (result0?.staleWarning || result1?.staleWarning) {
         const i18nKey = result0?.staleMessage || result1?.staleMessage || "staleDataWarning";
-        logger.warn(`[main] Stale data detected - forcing logout: ${i18nKey}`);
-
-        const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
-        await clearAllCookies();
-        stopCookieRefreshService();
-
-        win?.webContents.send("login-required");
-        win?.webContents.send("reload");
-
+        logger.warn(`[main] Stale data detected - requiring re-login: ${i18nKey}`);
+        await requireLogin(i18nKey);
         win?.webContents.send("toast-stale-logout", i18nKey);
-
         return;
       }
 
       logger.info("[main] fetched schedule in background");
+
+      startClassReminderService({
+        getTodaySchedule: async () => {
+          const d = new Date();
+          const key = weekKey(d);
+          const schedule = await loadScheduleAsync(key);
+          return schedule?.data || [];
+        },
+        onNotificationClick: () => {
+          showWindow();
+        },
+        iconPath: path.join(__dirname, "../app/assets/uneti.ico"),
+      });
     } catch (err) {
       const errMsg = err?.message || String(err);
       logger.warn(`[main] fetch in background failed: ${errMsg}`);
