@@ -15,14 +15,16 @@ function sanitizeUrlForLog(rawUrl) {
 export async function callSupportApi({ endpoint, method = "GET", body = null, label = "support-api" }) {
   const cookieHeader = await buildCookieHeader();
 
+  if (!cookieHeader) {
+    throw createAuthError(`No cookies available when calling ${label}`);
+  }
+
   const headers = {
     Origin: "https://support.uneti.edu.vn",
     Referer: "https://support.uneti.edu.vn/",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    Cookie: cookieHeader,
   };
-
-  if (cookieHeader) {
-    headers.Cookie = cookieHeader;
-  }
 
   const options = {
     method,

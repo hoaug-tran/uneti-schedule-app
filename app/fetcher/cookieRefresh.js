@@ -2,6 +2,7 @@ import { callSupportApi } from "./supportApi.js";
 import { getStudentId } from "./userStore.js";
 import { isAuthError } from "./sessionState.js";
 import { CONFIG } from "../config.js";
+import { API_FIELDS } from "../constants.js";
 import { logger } from "../utils/logger.js";
 
 let refreshTimer = null;
@@ -14,7 +15,7 @@ export function startCookieRefreshService(onAuthExpired = null) {
       const studentId = await getStudentId();
       if (!studentId) return;
 
-      const testUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?TC_SV_KetQuaHocTap_MaSinhVien=${encodeURIComponent(studentId)}`;
+      const testUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
       await callSupportApi({
         endpoint: testUrl,
         method: "GET",

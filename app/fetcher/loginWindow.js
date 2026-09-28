@@ -3,6 +3,7 @@ import {
   saveCookiesToSecureStorage,
   saveCookieHeaderToTxt,
   getCookiePartition,
+  getJwtExpiration,
 } from "./cookieManager.js";
 import { saveUser } from "./userStore.js";
 import { CONFIG } from "../config.js";
@@ -17,9 +18,19 @@ function sanitizeUrl(rawUrl) {
   }
 }
 
+function isTrustedUnetiUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.hostname === "support.uneti.edu.vn" || parsed.hostname.endsWith(".uneti.edu.vn");
+  } catch {
+    return false;
+  }
+}
+
 export async function showLoginWindow(parent) {
   return new Promise((resolve, reject) => {
     let finished = false;
+    let pollTimer = null;
 
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const { width: screenW, height: screenH, x: screenX, y: screenY } = display.workArea;
@@ -40,7 +51,8 @@ export async function showLoginWindow(parent) {
       backgroundColor: "#141414",
       title: "Đăng nhập UNETI",
       webPreferences: {
-        contextIsolation: false,
+        contextIsolation: true,
+        nodeIntegration: false,
         partition: getCookiePartition(),
       },
     });
@@ -48,15 +60,32 @@ export async function showLoginWindow(parent) {
     win.loadURL(CONFIG.UNETI_LOGIN_URL);
     logger.debug(`[loginWindow] loading URL: ${CONFIG.UNETI_LOGIN_URL} at x:${posX}, y:${posY}`);
 
+    const cleanup = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
     async function handleSuccessfulLogin(source) {
       if (finished) return;
-      finished = true;
 
       try {
+        const ses = win.webContents.session;
+        const allCookies = await ses.cookies.get({});
+        const cookies = allCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+        const hasAccessToken = cookies.some((c) => c.name === "access_token");
+
+        if (!cookies || cookies.length === 0 || !hasAccessToken) {
+          return;
+        }
+
+        finished = true;
+        cleanup();
+
         if (win && !win.isDestroyed()) {
           win.hide();
         }
-        await new Promise((r) => setTimeout(r, 400));
 
         let userData = null;
         try {
@@ -86,10 +115,27 @@ export async function showLoginWindow(parent) {
           logger.info(`[loginWindow] saved student profile: ${maskedId}`);
         }
 
-        const allCookies = await win.webContents.session.cookies.get({});
-        const cookies = allCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
-        const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+        for (const cookie of cookies) {
+          const jwtExp = getJwtExpiration(cookie.value);
+          if (jwtExp && jwtExp > Date.now() / 1000) {
+            try {
+              const cleanDomain = (cookie.domain || CONFIG.UNETI_DOMAIN).replace(/^\./, "");
+              const cleanPath = cookie.path || "/";
+              await ses.cookies.set({
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cleanPath,
+                secure: !!cookie.secure,
+                httpOnly: !!cookie.httpOnly,
+                expirationDate: jwtExp,
+                url: `https://${cleanDomain}${cleanPath}`,
+              });
+            } catch {}
+          }
+        }
 
+        const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
         await saveCookiesToSecureStorage(cookies);
         await saveCookieHeaderToTxt(cookieHeader);
         const cleanSource = source.startsWith("http") ? sanitizeUrl(source) : source;
@@ -103,6 +149,7 @@ export async function showLoginWindow(parent) {
         resolve(cookieHeader);
       } catch (err) {
         logger.error(`[loginWindow] login capture error: ${err?.message}`);
+        cleanup();
         win.close();
         if (parent && !parent.isDestroyed()) {
           parent.show();
@@ -112,18 +159,41 @@ export async function showLoginWindow(parent) {
       }
     }
 
-    win.webContents.session.webRequest.onCompleted(
-      { urls: ["*://apiv3.uneti.edu.vn/api/auth/*"] },
-      (details) => {
-        if (details.statusCode === 200 && details.url.includes("login")) {
-          handleSuccessfulLogin("API auth/login");
+    const checkAuthState = async () => {
+      if (finished || win.isDestroyed()) return;
+      try {
+        const currentUrl = win.webContents.getURL();
+        if (!isTrustedUnetiUrl(currentUrl)) return;
+
+        const isNotOnLoginUrl = !currentUrl.includes("/dang-nhap");
+
+        const hasAuthStore = await win.webContents.executeJavaScript(`
+          (() => {
+            try {
+              const root = localStorage.getItem("persist:root");
+              if (root) {
+                const p = JSON.parse(root);
+                const auth = p.auth ? JSON.parse(p.auth) : null;
+                if (auth?.isAuthenticated && auth?.currentUser) return true;
+              }
+              const u = localStorage.getItem("userData") || localStorage.getItem("userSV") || localStorage.getItem("studentData");
+              if (u) return true;
+            } catch {}
+            return false;
+          })()
+        `).catch(() => false);
+
+        if (isNotOnLoginUrl || hasAuthStore) {
+          await handleSuccessfulLogin(currentUrl);
         }
-      }
-    );
+      } catch {}
+    };
+
+    pollTimer = setInterval(checkAuthState, 600);
 
     const onNavigate = (_, url) => {
       logger.debug(`[loginWindow] navigated to: ${sanitizeUrl(url)}`);
-      if (url.includes("/uneti") || (url.includes("support.uneti.edu.vn") && !url.includes("/dang-nhap"))) {
+      if (isTrustedUnetiUrl(url) && !url.includes("/dang-nhap")) {
         handleSuccessfulLogin(url);
       }
     };
@@ -132,6 +202,7 @@ export async function showLoginWindow(parent) {
     win.webContents.on("did-navigate-in-page", onNavigate);
 
     win.on("closed", () => {
+      cleanup();
       if (!finished) {
         logger.warn("[loginWindow] Window closed before login");
         if (parent && !parent.isDestroyed()) {

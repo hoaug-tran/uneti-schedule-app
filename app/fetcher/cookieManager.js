@@ -4,7 +4,7 @@ import { session } from "electron";
 import keytar from "keytar";
 import { getStoreDir } from "./storePath.js";
 import { CONFIG } from "../config.js";
-import { encryptJSON, decryptJSON, isEncrypted } from "../utils/encryption.js";
+import { encryptJSON, decryptJSON, isEncrypted, encrypt, decrypt } from "../utils/encryption.js";
 import { logger } from "../utils/logger.js";
 
 let cookiePersistTimeout = null;
@@ -14,15 +14,19 @@ export function getCookiePartition() {
 }
 
 export async function saveCookiesToSecureStorage(cookies) {
+  if (!Array.isArray(cookies) || cookies.length === 0) {
+    return false;
+  }
   try {
-    const json = JSON.stringify(cookies);
+    const normalized = cookies.map(normalizeCookie);
+    const json = JSON.stringify(normalized);
     await keytar.setPassword(
       CONFIG.COOKIE_KEYTAR_SERVICE,
       CONFIG.COOKIE_KEYTAR_ACCOUNT,
       json
     );
     logger.debug(
-      `[cookieManager] saved ${cookies.length} cookies to secure storage`
+      `[cookieManager] saved ${normalized.length} cookies to secure storage`
     );
     return true;
   } catch (err) {
@@ -34,15 +38,19 @@ export async function saveCookiesToSecureStorage(cookies) {
 }
 
 async function saveCookiesToJsonFile(cookies) {
+  if (!Array.isArray(cookies) || cookies.length === 0) {
+    return false;
+  }
   try {
     const dir = getStoreDir();
     await fs.mkdir(dir, { recursive: true });
     const jsonPath = path.join(dir, "cookies.json");
 
-    const encrypted = encryptJSON(cookies);
+    const normalized = cookies.map(normalizeCookie);
+    const encrypted = encryptJSON(normalized);
     await fs.writeFile(jsonPath, encrypted, "utf8");
 
-    logger.info(`Saved ${cookies.length} encrypted cookies to JSON file`);
+    logger.info(`Saved ${normalized.length} encrypted cookies to JSON file`);
     return true;
   } catch (err) {
     logger.error("JSON cookie save failed", { error: err.message });
@@ -51,12 +59,16 @@ async function saveCookiesToJsonFile(cookies) {
 }
 
 export async function saveCookieHeaderToTxt(cookieHeader) {
+  if (!cookieHeader || !cookieHeader.trim()) {
+    return false;
+  }
   try {
     const dir = getStoreDir();
     await fs.mkdir(dir, { recursive: true });
     const txtPath = path.join(dir, "cookies.txt");
-    await fs.writeFile(txtPath, cookieHeader, "utf8");
-    logger.debug("[cookieManager] saved cookie header to txt");
+    const encrypted = encrypt(cookieHeader);
+    await fs.writeFile(txtPath, encrypted, "utf8");
+    logger.debug("[cookieManager] saved encrypted cookie header to txt");
     return true;
   } catch (err) {
     logger.error(`[cookieManager] txt save failed: ${err?.message}`);
@@ -102,7 +114,9 @@ async function loadCookiesFromJsonFile() {
 
     return cookies;
   } catch (err) {
-    logger.warn("JSON cookie load failed", { error: err.message });
+    if (err?.code !== "ENOENT") {
+      logger.warn("JSON cookie load failed", { error: err.message });
+    }
     return null;
   }
 }
@@ -111,16 +125,53 @@ export async function loadCookieHeaderFromTxt() {
   try {
     const dir = getStoreDir();
     const txtPath = path.join(dir, "cookies.txt");
-    const header = await fs.readFile(txtPath, "utf8");
-    const h = header.replace(/\r?\n/g, "").trim();
-    return h || null;
+    const data = await fs.readFile(txtPath, "utf8");
+    const h = data.replace(/\r?\n/g, "").trim();
+    if (!h) return null;
+    try {
+      return decrypt(h);
+    } catch {
+      return h;
+    }
   } catch {
     return null;
   }
 }
 
+export function getJwtExpiration(tokenValue) {
+  try {
+    if (!tokenValue || typeof tokenValue !== "string") return null;
+    const parts = tokenValue.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+    if (typeof payload.exp === "number") {
+      return payload.exp;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function normalizeCookie(cookie) {
+  if (!cookie || !cookie.value) return cookie;
+  const jwtExp = getJwtExpiration(cookie.value);
+  if (jwtExp && jwtExp > Date.now() / 1000) {
+    return {
+      ...cookie,
+      expirationDate: jwtExp,
+      session: false,
+    };
+  }
+  return cookie;
+}
+
 function validateCookie(cookie) {
   if (!cookie.name || !cookie.value) return false;
+  const jwtExp = getJwtExpiration(cookie.value);
+  if (jwtExp) {
+    return jwtExp > Date.now() / 1000;
+  }
   if (cookie.expirationDate && cookie.expirationDate < Date.now() / 1000) {
     return false;
   }
@@ -133,13 +184,15 @@ export async function bootstrapCookiesToSession() {
 
   const allExisting = await ses.cookies.get({});
   const existing = allExisting.filter(c => c.domain?.includes(CONFIG.UNETI_DOMAIN));
-  if (existing && existing.length > 0) {
+  const validExisting = existing.filter(validateCookie);
+  const hasAccessToken = validExisting.some(c => c.name === "access_token");
+  if (validExisting.length > 0 && hasAccessToken) {
     logger.debug("[cookieManager] session already has cookies");
     return;
   }
 
   let cookies = await loadCookiesFromSecureStorage();
-  if (!cookies) {
+  if (!cookies || !Array.isArray(cookies) || cookies.length === 0) {
     cookies = await loadCookiesFromJsonFile();
   }
 
@@ -148,7 +201,8 @@ export async function bootstrapCookiesToSession() {
     return;
   }
 
-  const validCookies = cookies.filter(validateCookie);
+  const normalizedCookies = cookies.map(normalizeCookie);
+  const validCookies = normalizedCookies.filter(validateCookie);
 
   for (const cookie of validCookies) {
     try {
@@ -239,8 +293,17 @@ export async function hasCookies() {
 
 export async function areCookiesValid() {
   try {
+    const partition = getCookiePartition();
+    const ses = session.fromPartition(partition);
+    const sesCookies = await ses.cookies.get({});
+    const filteredSes = sesCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+    const validSes = filteredSes.filter(validateCookie);
+    if (validSes.length > 0) {
+      return true;
+    }
+
     let cookies = await loadCookiesFromSecureStorage();
-    if (!cookies) {
+    if (!cookies || !Array.isArray(cookies) || cookies.length === 0) {
       cookies = await loadCookiesFromJsonFile();
     }
 
@@ -261,15 +324,29 @@ export async function buildCookieHeader() {
     const ses = session.fromPartition(partition);
     const all = await ses.cookies.get({});
     const cookies = all.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
-    if (cookies.length > 0) {
-      return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+    const validCookies = cookies.filter(validateCookie);
+    const hasAccessToken = validCookies.some((c) => c.name === "access_token");
+    if (validCookies.length > 0 && hasAccessToken) {
+      return validCookies.map((c) => `${c.name}=${c.value}`).join("; ");
     }
   } catch {}
 
   try {
     const txt = await loadCookieHeaderFromTxt();
-    if (txt) return txt;
+    if (txt && txt.includes("access_token")) return txt;
   } catch {}
+
+  let stored = await loadCookiesFromSecureStorage();
+  if (!stored || stored.length === 0) {
+    stored = await loadCookiesFromJsonFile();
+  }
+  if (Array.isArray(stored) && stored.length > 0) {
+    const valid = stored.map(normalizeCookie).filter(validateCookie);
+    const hasAccessToken = valid.some((c) => c.name === "access_token");
+    if (valid.length > 0 && hasAccessToken) {
+      return valid.map((c) => `${c.name}=${c.value}`).join("; ");
+    }
+  }
 
   return "";
 }
