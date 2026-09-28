@@ -21,12 +21,15 @@ let appVersionValue = null;
 let currentWeek = startOfWeek(new Date());
 let preFetchedWeek = null;
 let justLoggedIn = false;
+let activeOpenGpaView = null;
+let currentActiveView = "schedule";
 
 const $ = (s, r = document) => r.querySelector(s);
 
 const toastManager = {
   container: null,
   activeTimers: new Map(),
+  removalTimers: new Map(),
 
   getContainer() {
     if (!this.container || !this.container.isConnected) {
@@ -52,12 +55,21 @@ const toastManager = {
       this.activeTimers.delete(toastId);
     }
 
+    if (this.removalTimers.has(toastId)) {
+      clearTimeout(this.removalTimers.get(toastId));
+      this.removalTimers.delete(toastId);
+    }
+
     if (toast && toast.isConnected) {
+      toast.classList.remove("hiding");
       toast.className = `toast toast-${type} show`;
       toast.innerHTML = html;
       if (clickable) {
         toast.style.cursor = "pointer";
         toast.onclick = onClick || null;
+      } else if (duration > 0) {
+        toast.style.cursor = "pointer";
+        toast.onclick = () => this.hide(toastId);
       } else {
         toast.style.cursor = "default";
         toast.onclick = null;
@@ -70,6 +82,9 @@ const toastManager = {
       if (clickable) {
         toast.style.cursor = "pointer";
         toast.onclick = onClick || null;
+      } else if (duration > 0) {
+        toast.style.cursor = "pointer";
+        toast.onclick = () => this.hide(toastId);
       }
       container.appendChild(toast);
       requestAnimationFrame(() => toast.classList.add("show"));
@@ -92,12 +107,19 @@ const toastManager = {
       clearTimeout(this.activeTimers.get(id));
       this.activeTimers.delete(id);
     }
+    if (this.removalTimers.has(id)) {
+      clearTimeout(this.removalTimers.get(id));
+      this.removalTimers.delete(id);
+    }
     const toast = document.getElementById(id);
     if (!toast) return;
     toast.classList.remove("show");
-    setTimeout(() => {
+    toast.classList.add("hiding");
+    const removalTimer = setTimeout(() => {
+      this.removalTimers.delete(id);
       if (toast.parentNode) toast.remove();
-    }, 250);
+    }, 320);
+    this.removalTimers.set(id, removalTimer);
   },
 };
 
@@ -319,7 +341,7 @@ function registerIpcListeners() {
   const justUpdated = sessionStorage.getItem("justUpdated");
   if (justUpdated) {
     sessionStorage.removeItem("justUpdated");
-    const version = window.appAPI?.getVersion?.() || "1.9.1";
+    const version = appVersionValue || "";
     setTimeout(() => {
       createToast(i18n.t("updateSuccess").replace("{version}", version), {
         id: "update-success",
@@ -345,7 +367,7 @@ function registerIpcListeners() {
       hideToast("login-required-toast");
       hideToast("stale-data-logout");
       hideToast("stale-data-warning");
-      showToast(i18n.t("loginSuccess"), "login-success-toast", "success");
+      showToast(i18n.t("loginSuccess"), "action-toast", "success");
       const btnGpa = document.getElementById("btn-gpa");
       if (btnGpa && btnGpa.dataset.view === "gpa") {
         btnGpa.dataset.view = "schedule";
@@ -367,25 +389,9 @@ function registerIpcListeners() {
       });
       const btnGpa = document.getElementById("btn-gpa");
       if (btnGpa && btnGpa.dataset.view === "gpa") {
-        const body = document.querySelector(".body");
-        if (body) {
-          body.innerHTML = `
-            <div class="empty-state">
-              <i data-lucide="graduation-cap" class="empty-icon"></i>
-              <div class="empty-title">${i18n.t("gpaNotLoggedInTitle")}</div>
-              <div class="empty-desc">${i18n.t("gpaNotLoggedInDesc")}</div>
-              <button id="btn-empty-gpa-login" class="empty-btn">${i18n.t("login")}</button>
-            </div>
-          `;
-          if (window.lucide) window.lucide.createIcons();
-          const btnEmptyGpaLogin = document.getElementById("btn-empty-gpa-login");
-          if (btnEmptyGpaLogin) {
-            btnEmptyGpaLogin.onclick = () => window.widgetAPI?.login?.();
-          }
-        }
-      } else {
-        render(window.dateAPI.weekKey(currentWeek));
+        btnGpa.dataset.view = "schedule";
       }
+      render(window.dateAPI.weekKey(currentWeek));
     });
   }
 
@@ -393,7 +399,7 @@ function registerIpcListeners() {
     const versionMatch = msg.match(/v([\d.]+)/);
     if (versionMatch) {
       updateState.newVersion = versionMatch[1];
-      updateState.currentVersion = window.appAPI?.getVersion?.() || "1.9.1";
+      updateState.currentVersion = appVersionValue || "";
       showUpdateToast("available", { newVersion: versionMatch[1] });
     }
   });
@@ -445,18 +451,50 @@ function registerIpcListeners() {
     showUpdateToast("error");
   });
 
+function updateToolbarLabels() {
+  const version = appVersionValue || "";
+  const titleSpan = document.querySelector(".title span");
+  if (titleSpan) {
+    titleSpan.innerHTML = `${i18n.t("title")}${version ? ` <span class="version-label">v${version}</span>` : ""}`;
+  }
+
+  const btnLangSpan = document.querySelector("#btn-lang span");
+  if (btnLangSpan) btnLangSpan.textContent = i18n.getLang().toUpperCase();
+
+  const btnUpdate = document.getElementById("btn-update");
+  if (btnUpdate) btnUpdate.textContent = i18n.t("checkUpdate");
+
+  const btnRefresh = document.getElementById("btn-refresh");
+  if (btnRefresh) btnRefresh.textContent = i18n.t("refresh");
+
+  const btnGpa = document.getElementById("btn-gpa");
+  if (btnGpa) {
+    btnGpa.textContent = currentActiveView === "gpa" ? i18n.t("scheduleTab") : "GPA";
+  }
+
+  const btnHide = document.getElementById("btn-hide");
+  if (btnHide) btnHide.textContent = i18n.t("minimize");
+
+  const btnExit = document.getElementById("btn-exit");
+  if (btnExit) btnExit.textContent = i18n.t("exit");
+
+  const btnPrevSpan = document.querySelector("#btn-prev-week span");
+  if (btnPrevSpan) btnPrevSpan.textContent = i18n.t("previous");
+
+  const btnNextSpan = document.querySelector("#btn-next-week span");
+  if (btnNextSpan) btnNextSpan.textContent = i18n.t("next");
+}
+
   window.addEventListener("languagechange", async () => {
-    window.loggerAPI?.debug("language changed, re-rendering");
+    window.loggerAPI?.debug("language changed, re-rendering in place");
     const btnGpa = document.getElementById("btn-gpa");
-    const wasGpa = btnGpa && btnGpa.dataset.view === "gpa";
+    const isGpa = currentActiveView === "gpa" || (btnGpa && btnGpa.dataset.view === "gpa");
 
-    await render(window.dateAPI.weekKey(currentWeek));
-
-    if (wasGpa) {
-      const newBtnGpa = document.getElementById("btn-gpa");
-      if (newBtnGpa) {
-        newBtnGpa.click();
-      }
+    if (isGpa && typeof activeOpenGpaView === "function") {
+      updateToolbarLabels();
+      await activeOpenGpaView();
+    } else {
+      await render(window.dateAPI.weekKey(currentWeek), { isLanguageChange: true });
     }
   });
 }
@@ -480,7 +518,8 @@ const calcSemGpa = (items, semSummary) => {
   return { gpa: credits ? weighted / credits : 0, credits };
 };
 
-async function render(isoDate) {
+async function render(isoDate, options = {}) {
+  currentActiveView = "schedule";
   const el = $("#content");
   window.loggerAPI?.debug(`[render] START, isoDate: ${isoDate}`);
 
@@ -488,7 +527,14 @@ async function render(isoDate) {
     const payload = await window.scheduleAPI?.load?.(isoDate);
     const hasCookies = await window.scheduleAPI?.cookiesExists?.();
 
-    let version = appVersionValue || "1.9.1";
+    if (!appVersionValue && window.appAPI?.getVersion) {
+      try {
+        appVersionValue = await window.appAPI.getVersion();
+      } catch {
+        appVersionValue = "";
+      }
+    }
+    let version = appVersionValue || "";
     let state = "first";
     let loginLabel = i18n.t("login");
 
@@ -511,7 +557,7 @@ async function render(isoDate) {
     const currentWeekKey = window.dateAPI.weekKey(new Date());
     const thisWeekKey = window.dateAPI.weekKey(isoDate);
 
-    if (state === "ok" && currentWeekKey === thisWeekKey && payload) {
+    if (state === "ok" && currentWeekKey === thisWeekKey && payload && !options.isLanguageChange) {
       if (preFetchedWeek !== currentWeekKey) {
         preFetchedWeek = currentWeekKey;
         setTimeout(async () => {
@@ -616,7 +662,7 @@ async function render(isoDate) {
     <div class="head">
       <div class="title">
         <img src="assets/uneti.webp" class="logo" alt="logo" />
-        <span>${i18n.t("title")} <span class="version-label">v${version}</span></span>
+        <span>${i18n.t("title")}${version ? ` <span class="version-label">v${version}</span>` : ""}</span>
       </div>
       <div class="actions">
         <div class="left-group">
@@ -691,14 +737,12 @@ async function render(isoDate) {
     if (btnEmptyRefresh) {
       btnEmptyRefresh.onclick = async () => {
         btnEmptyRefresh.disabled = true;
-        createToast(i18n.t("fetchingWeek"), { id: "refresh-loading", duration: 0, type: "info" });
+        createToast(i18n.t("fetchingWeek"), { id: "action-toast", duration: 0, type: "info" });
         try {
           await window.widgetAPI.refresh();
-          hideToast("refresh-loading");
-          createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success" });
+          createToast(i18n.t("fetchSuccess"), { id: "action-toast", duration: 3000, type: "success" });
         } catch {
-          hideToast("refresh-loading");
-          createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error" });
+          createToast(i18n.t("fetchError"), { id: "action-toast", duration: 3500, type: "error" });
         } finally {
           btnEmptyRefresh.disabled = false;
         }
@@ -752,7 +796,7 @@ async function render(isoDate) {
           const res = await window.updateAPI?.check?.();
           if (res?.update) {
             updateState.newVersion = res.version;
-            updateState.currentVersion = appVersionValue || "1.9.1";
+            updateState.currentVersion = appVersionValue || "";
             showUpdateToast("available", { newVersion: res.version });
           } else if (res?.error) {
             showUpdateToast("error");
@@ -767,19 +811,13 @@ async function render(isoDate) {
       };
     }
 
+    let openGpaView = null;
     if (btnGpa) {
-      btnGpa.onclick = async () => {
+      openGpaView = async () => {
+        currentActiveView = "gpa";
+        activeOpenGpaView = openGpaView;
         const body = document.querySelector(".body");
         const footerBar = document.querySelector(".footer-bar");
-
-        if (btnGpa.dataset.view === "gpa") {
-          btnGpa.dataset.view = "schedule";
-          btnGpa.textContent = "GPA";
-          btnGpa.classList.remove("active");
-          if (footerBar) footerBar.style.display = "";
-          await render(window.dateAPI.weekKey(currentWeek));
-          return;
-        }
 
         btnGpa.dataset.view = "gpa";
         btnGpa.textContent = i18n.t("scheduleTab");
@@ -1313,6 +1351,20 @@ async function render(isoDate) {
 
         await renderView(data, "good", {}, [], {});
       };
+
+      btnGpa.onclick = async () => {
+        if (btnGpa.dataset.view === "gpa") {
+          currentActiveView = "schedule";
+          btnGpa.dataset.view = "schedule";
+          btnGpa.textContent = "GPA";
+          btnGpa.classList.remove("active");
+          const footerBar = document.querySelector(".footer-bar");
+          if (footerBar) footerBar.style.display = "";
+          await render(window.dateAPI.weekKey(currentWeek));
+          return;
+        }
+        await openGpaView();
+      };
     }
 
     if (btnLogin) {
@@ -1334,16 +1386,27 @@ async function render(isoDate) {
     if (btnRefresh) {
       btnRefresh.onclick = async () => {
         btnRefresh.disabled = true;
-        hideToast("refresh-success");
-        hideToast("refresh-error");
-        createToast(i18n.t("fetchingWeek"), { id: "refresh-loading", duration: 0, type: "info" });
+        const isGpaView = currentActiveView === "gpa" || (btnGpa && btnGpa.dataset.view === "gpa");
+        const loadingMsg = isGpaView ? (i18n.t("fetchingGpa") || "Đang làm mới điểm & GPA...") : i18n.t("fetchingWeek");
+        createToast(loadingMsg, { id: "action-toast", duration: 0, type: "info" });
         try {
-          await window.widgetAPI.refresh();
-          hideToast("refresh-loading");
-          createToast(i18n.t("fetchSuccess"), { id: "refresh-success", duration: 2500, type: "success" });
+          if (isGpaView) {
+            const res = await window.academicAPI?.refresh?.();
+            if (res?.ok === false) {
+              const errMsg = res?.auth ? i18n.t("sessionExpired") : (i18n.t("gpaRefreshError") || "Lỗi làm mới bảng điểm");
+              createToast(errMsg, { id: "action-toast", duration: 3500, type: "error" });
+              return;
+            }
+            if (openGpaView) {
+              await openGpaView();
+            }
+            createToast(i18n.t("gpaRefreshSuccess") || "Đã cập nhật bảng điểm & GPA!", { id: "action-toast", duration: 3000, type: "success" });
+          } else {
+            await window.widgetAPI.refresh();
+            createToast(i18n.t("fetchSuccess"), { id: "action-toast", duration: 3000, type: "success" });
+          }
         } catch {
-          hideToast("refresh-loading");
-          createToast(i18n.t("fetchError"), { id: "refresh-error", duration: 3000, type: "error" });
+          createToast(isGpaView ? (i18n.t("gpaRefreshError") || "Lỗi làm mới bảng điểm") : i18n.t("fetchError"), { id: "action-toast", duration: 3500, type: "error" });
         } finally {
           btnRefresh.disabled = false;
         }
@@ -1409,7 +1472,7 @@ async function changeWeek(offset) {
   }
 
   isChangingWeek = true;
-  const toastId = "week-toast";
+  const actionToastId = "action-toast";
 
   try {
     const calendarEl = document.getElementById("cal");
@@ -1417,7 +1480,7 @@ async function changeWeek(offset) {
       calendarEl.outerHTML = createSkeletonHTML();
     }
 
-    createToast(i18n.t("fetchingWeek"), { id: toastId, duration: 0, type: "info" });
+    createToast(i18n.t("fetchingWeek"), { id: actionToastId, duration: 0, type: "info" });
     const payload = await window.widgetAPI.fetchWeek(offset, currentWeek.toISOString());
 
     if (!payload || !payload.weekStart) {
@@ -1429,32 +1492,29 @@ async function changeWeek(offset) {
       if (cachedData && cachedData.weekStart) {
         currentWeek = new Date(cachedData.weekStart);
         await render(window.dateAPI.weekKey(currentWeek));
-        hideToast(toastId);
         if (!isOnline) {
-          createToast(i18n.t("offlineMode"), { id: toastId, type: "warning" });
+          createToast(i18n.t("offlineMode"), { id: actionToastId, duration: 3500, type: "warning" });
         } else {
-          createToast(i18n.t("loadFailed"), { id: toastId, type: "error" });
+          createToast(i18n.t("loadFailed"), { id: actionToastId, duration: 3500, type: "error" });
         }
       } else {
-        hideToast(toastId);
-        createToast(i18n.t("noDataForWeek"), { id: toastId, type: "error" });
+        createToast(i18n.t("noDataForWeek"), { id: actionToastId, duration: 3500, type: "error" });
       }
       return;
     }
 
     currentWeek = new Date(payload.weekStart);
     await render(window.dateAPI.weekKey(currentWeek));
-    hideToast(toastId);
-    createToast(i18n.t("fetchSuccess"), { id: toastId, duration: 2500, type: "success" });
+    createToast(i18n.t("fetchSuccess"), { id: actionToastId, duration: 3000, type: "success" });
   } catch (err) {
     window.loggerAPI?.error(`[changeWeek] ERROR: ${err?.message}`, err);
 
     if (err?.message?.includes("Cookie expired") || err?.message?.includes("Session") || err?.message?.includes("No cookies")) {
-      hideToast(toastId);
       createToast(i18n.t("sessionExpired"), {
-        id: toastId,
+        id: actionToastId,
         type: "error",
         clickable: true,
+        duration: 0,
         onClick: () => window.widgetAPI.login(),
       });
       return;
@@ -1469,19 +1529,16 @@ async function changeWeek(offset) {
       if (cachedData && cachedData.weekStart) {
         currentWeek = new Date(cachedData.weekStart);
         await render(window.dateAPI.weekKey(currentWeek));
-        hideToast(toastId);
         if (!isOnline) {
-          createToast(i18n.t("offlineMode"), { id: toastId, type: "warning" });
+          createToast(i18n.t("offlineMode"), { id: actionToastId, duration: 3500, type: "warning" });
         } else {
-          createToast(i18n.t("loadFailed"), { id: toastId, type: "error" });
+          createToast(i18n.t("loadFailed"), { id: actionToastId, duration: 3500, type: "error" });
         }
       } else {
-        hideToast(toastId);
-        createToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), { id: toastId, type: "error" });
+        createToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), { id: actionToastId, duration: 4000, type: "error" });
       }
     } catch {
-      hideToast(toastId);
-      createToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), { id: toastId, type: "error" });
+      createToast(i18n.t("fetchError") + ": " + (err?.message || "Unknown"), { id: actionToastId, duration: 4000, type: "error" });
     }
   } finally {
     isChangingWeek = false;
@@ -1497,7 +1554,7 @@ async function initApp() {
   try {
     appVersionValue = await window.appAPI?.getVersion?.();
   } catch {
-    appVersionValue = "1.9.1";
+    appVersionValue = "";
   }
 
   registerIpcListeners();
