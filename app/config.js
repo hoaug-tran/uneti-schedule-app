@@ -5,6 +5,7 @@ export const CONFIG = {
   SCHEDULE_CACHE_MAX_AGE_MS: 30 * 24 * 60 * 60 * 1000,
   AUTO_REFRESH_INTERVAL_MS: 60 * 60 * 1000,
   AUTO_REFRESH_NEXT_WEEK_MS: 6 * 60 * 60 * 1000,
+  ACADEMIC_REFRESH_THROTTLE_MS: 60 * 1000,
   NETWORK_STALL_TIMEOUT_MS: 20000,
   COOKIE_REFRESH_INTERVAL_MS: 15 * 60 * 1000,
   ACTIVE_HOURS_START: 6,
@@ -29,5 +30,4 @@ export const CONFIG = {
   UNETI_MAJOR_CURRICULUM_ENDPOINT: "https://apiv3.uneti.edu.vn/api/SP_MC_DT_ChuyenNganh/ChuongTrinhKhung_Load_ByKhoaNganh",
   COOKIE_KEYTAR_SERVICE: "uneti-schedule-app",
   COOKIE_KEYTAR_ACCOUNT: "cookies",
-  DB_FILENAME: "schedule.db",
 };

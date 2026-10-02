@@ -1,5 +1,5 @@
 import { callSupportApi } from "./supportApi.js";
-import { saveAcademicResults } from "./academicDb.js";
+import { saveAcademicResults, loadAcademicResults } from "./academicDb.js";
 import { getStudentId } from "./userStore.js";
 import { createAuthError } from "./sessionState.js";
 import { CONFIG } from "../config.js";
@@ -7,25 +7,43 @@ import { API_FIELDS, NON_GPA_SUBJECT_PATTERNS } from "../constants.js";
 import { normalizeText, courseKeyOf } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 
-export async function getAcademicResults() {
-  logger.info("[academic] fetching academic results from support API");
+let activeFetchPromise = null;
+let lastFetchTimestamp = 0;
 
-  const studentId = await getStudentId();
-  if (!studentId) {
-    throw createAuthError("Student ID not found. Please log in to UNETI Support.");
+export async function getAcademicResults(options = {}) {
+  const force = options?.force === true;
+  const throttleMs = CONFIG.ACADEMIC_REFRESH_THROTTLE_MS || 60000;
+  if (!force && Date.now() - lastFetchTimestamp < throttleMs) {
+    const cached = await loadAcademicResults();
+    if (cached?.subjects?.length) {
+      return cached;
+    }
   }
 
-  const gradesUrl = `${CONFIG.UNETI_GRADES_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
-  const gpaUrl = `${CONFIG.UNETI_GPA_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
-  const scheduleUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
-  const curriculumUrl = `${CONFIG.UNETI_CURRICULUM_ENDPOINT}?${API_FIELDS.CURRICULUM_STUDENT_ID}=${encodeURIComponent(studentId)}`;
+  if (activeFetchPromise) {
+    return activeFetchPromise;
+  }
 
-  const [gradesJson, gpaJson, schedJson, curriculumJson] = await Promise.all([
-    callSupportApi({ endpoint: gradesUrl, method: "GET", label: "academic-grades" }),
-    callSupportApi({ endpoint: gpaUrl, method: "GET", label: "academic-gpa" }),
-    callSupportApi({ endpoint: scheduleUrl, method: "GET", label: "academic-schedule" }).catch(() => null),
-    callSupportApi({ endpoint: curriculumUrl, method: "GET", label: "academic-curriculum" }).catch(() => null),
-  ]);
+  activeFetchPromise = (async () => {
+    try {
+      logger.info("[academic] fetching academic results from support API");
+
+      const studentId = await getStudentId();
+      if (!studentId) {
+        throw createAuthError("Student ID not found. Please log in to UNETI Support.");
+      }
+
+      const gradesUrl = `${CONFIG.UNETI_GRADES_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
+      const gpaUrl = `${CONFIG.UNETI_GPA_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
+      const scheduleUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
+      const curriculumUrl = `${CONFIG.UNETI_CURRICULUM_ENDPOINT}?${API_FIELDS.CURRICULUM_STUDENT_ID}=${encodeURIComponent(studentId)}`;
+
+      const [gradesJson, gpaJson, schedJson, curriculumJson] = await Promise.all([
+        callSupportApi({ endpoint: gradesUrl, method: "GET", label: "academic-grades" }),
+        callSupportApi({ endpoint: gpaUrl, method: "GET", label: "academic-gpa" }),
+        callSupportApi({ endpoint: scheduleUrl, method: "GET", label: "academic-schedule" }).catch(() => null),
+        callSupportApi({ endpoint: curriculumUrl, method: "GET", label: "academic-curriculum" }).catch(() => null),
+      ]);
 
   const gradesBody = gradesJson?.body || [];
   const gpaBody = gpaJson?.body || [];
@@ -264,7 +282,14 @@ export async function getAcademicResults() {
     semesterSummaries,
   };
 
-  await saveAcademicResults(parsed);
-  logger.info(`[academic] saved ${subjects.length} subjects and GPA summaries`);
-  return parsed;
+    await saveAcademicResults(parsed);
+    logger.info(`[academic] saved ${subjects.length} subjects and GPA summaries`);
+    lastFetchTimestamp = Date.now();
+    return parsed;
+  } finally {
+    activeFetchPromise = null;
+  }
+  })();
+
+  return activeFetchPromise;
 }

@@ -1,6 +1,6 @@
-import fs from "fs/promises";
 import path from "path";
 import { getStoreDir } from "./storePath.js";
+import { readJson, writeJsonAtomic } from "./jsonStore.js";
 
 const SCHEDULES_FILE = "schedules.json";
 let memoryCache = null;
@@ -12,7 +12,7 @@ function queueWrite(fn) {
   return next;
 }
 
-async function getSchedulesPath() {
+function getSchedulesPath() {
   const storeDir = getStoreDir();
   return path.join(storeDir, SCHEDULES_FILE);
 }
@@ -21,41 +21,17 @@ async function loadSchedulesFromDisk() {
   if (memoryCache !== null) {
     return memoryCache;
   }
-  try {
-    const filePath = await getSchedulesPath();
-    const exists = await fs
-      .stat(filePath)
-      .then(() => true)
-      .catch(() => false);
-    if (!exists) {
-      memoryCache = {};
-      return memoryCache;
-    }
-
-    const data = await fs.readFile(filePath, "utf8");
-    try {
-      memoryCache = JSON.parse(data) || {};
-      return memoryCache;
-    } catch {
-      memoryCache = {};
-      return memoryCache;
-    }
-  } catch {
-    memoryCache = {};
-    return memoryCache;
-  }
+  const filePath = getSchedulesPath();
+  const data = await readJson(filePath, {});
+  memoryCache = data && typeof data === "object" ? data : {};
+  return memoryCache;
 }
 
 async function saveSchedulesToDisk(schedules) {
   try {
     memoryCache = schedules;
-    const storeDir = getStoreDir();
-    await fs.mkdir(storeDir, { recursive: true });
-    const filePath = await getSchedulesPath();
-    const rand = Math.random().toString(36).slice(2);
-    const tmp = path.join(storeDir, `schedules.${Date.now()}.${rand}.tmp`);
-    await fs.writeFile(tmp, JSON.stringify(schedules, null, 2), "utf8");
-    await fs.rename(tmp, filePath);
+    const filePath = getSchedulesPath();
+    await writeJsonAtomic(filePath, schedules);
   } catch (err) {
     console.warn("[scheduleDb] save failed:", err?.message);
   }
