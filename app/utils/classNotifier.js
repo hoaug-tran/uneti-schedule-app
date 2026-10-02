@@ -4,6 +4,7 @@ import { logger } from "./logger.js";
 
 const notifiedItems = new Set();
 let reminderInterval = null;
+let lastRecordedDay = "";
 
 function parseClassTime(dayStr, timeStr) {
   try {
@@ -12,6 +13,19 @@ function parseClassTime(dayStr, timeStr) {
     return new Date(y, m - 1, d, h, min, 0, 0);
   } catch {
     return null;
+  }
+}
+
+function pruneOldNotifiedItems(todayStr) {
+  if (lastRecordedDay && lastRecordedDay !== todayStr) {
+    notifiedItems.clear();
+  }
+  lastRecordedDay = todayStr;
+
+  for (const itemKey of notifiedItems) {
+    if (!itemKey.startsWith(todayStr)) {
+      notifiedItems.delete(itemKey);
+    }
   }
 }
 
@@ -28,6 +42,7 @@ export function startClassReminderService({ getTodaySchedule, onNotificationClic
 
       const now = new Date();
       const todayStr = formatYMDLocal(now);
+      pruneOldNotifiedItems(todayStr);
 
       const todayItems = scheduleItems.filter((it) => it.day === todayStr);
 

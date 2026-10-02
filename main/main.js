@@ -17,7 +17,8 @@ import {
   dialog,
   Notification,
 } from "electron";
-import AutoLaunch from "auto-launch";
+import fs from "fs/promises";
+import { getStoreDir } from "../app/fetcher/storePath.js";
 import pkg from "electron-updater";
 const { autoUpdater } = pkg;
 
@@ -107,10 +108,66 @@ async function requireLogin(reason = "Session expired") {
     setTimeout(() => { loginRequiredInFlight = false; }, 3000);
   }
 }
-const autoLauncher = new AutoLaunch({
-  name: CONFIG.APP_NAME,
-  path: process.execPath,
-});
+
+function isAutoLaunchEnabled() {
+  if (isDev) return Boolean(store.get("openAtLogin", false));
+  return app.getLoginItemSettings().openAtLogin;
+}
+
+function setAutoLaunch(enabled) {
+  store.set("openAtLogin", enabled);
+  if (!isDev) {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      path: process.execPath,
+    });
+    logger.info(`[startup] Auto-launch set to ${enabled} (${process.execPath})`);
+  }
+}
+
+async function handlePostUpdateCleanup() {
+  try {
+    const lastVersion = store.get("lastAppVersion");
+    const currentVersion = app.getVersion();
+
+    if (lastVersion && lastVersion !== currentVersion) {
+      logger.info(`[update-cleanup] Upgraded from ${lastVersion} to ${currentVersion}`);
+
+      const localAppData = process.env.LOCALAPPDATA || "";
+      if (localAppData) {
+        const updaterDir = path.join(localAppData, "uneti-schedule-widget-updater");
+        try {
+          await fs.rm(updaterDir, { recursive: true, force: true });
+        } catch {}
+      }
+
+      const storeDir = getStoreDir();
+      try {
+        const files = await fs.readdir(storeDir);
+        for (const f of files) {
+          if (f.endsWith(".tmp") || f.includes(".tmp.")) {
+            await fs.unlink(path.join(storeDir, f)).catch(() => {});
+          }
+        }
+      } catch {}
+
+      try {
+        await session.defaultSession.clearCache();
+      } catch {}
+
+      if (store.get("openAtLogin", false) && !isDev) {
+        app.setLoginItemSettings({
+          openAtLogin: true,
+          path: process.execPath,
+        });
+      }
+    }
+
+    store.set("lastAppVersion", currentVersion);
+  } catch (err) {
+    logger.warn(`[update-cleanup] failed: ${err?.message}`);
+  }
+}
 
 ipcMain.handle("get-userData-path", () => app.getPath("userData"));
 
@@ -150,10 +207,10 @@ ipcMain.on("logger:log", (_, level, message, context) => {
 
 ipcMain.handle("academic:load-file", async () => loadAcademicResults());
 
-ipcMain.handle("academic:refresh", async () => {
+ipcMain.handle("academic:refresh", async (_, options) => {
   try {
     logger.debug("[IPC] academic:refresh");
-    const data = await getAcademicResults();
+    const data = await getAcademicResults(options);
     return { ok: true, data };
   } catch (err) {
     logger.warn(`[academic:refresh] fail: ${err?.message}`);
@@ -470,6 +527,14 @@ ipcMain.handle("app:confirm-install", async () => {
 
 ipcMain.handle("app:get-version", () => app.getVersion());
 
+ipcMain.handle("app:open-external", async (_, url) => {
+  if (typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"))) {
+    await shell.openExternal(url);
+    return true;
+  }
+  return false;
+});
+
 ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
   try {
     logger.debug(`[IPC] widget:fetch-week offset: ${offset} baseIso: ${baseIso}`);
@@ -517,10 +582,11 @@ function resetStallWatch() {
   if (stallTimer) clearTimeout(stallTimer);
   stallTimer = setTimeout(() => {
     if (downloading) {
-      win?.webContents.send(
-        "update:error",
-        "Network unstable, update interrupted. Please check connection and retry."
-      );
+      win?.webContents.send("update:error", {
+        message: "Mạng không ổn định, gián đoạn tải bản cập nhật. Bấm để tải thủ công từ GitHub.",
+        isDownloadFailure: true,
+        githubUrl: "https://github.com/hoaug-tran/uneti-schedule-app/releases/latest",
+      });
       downloading = false;
       lastTransferred = 0;
     }
@@ -578,13 +644,23 @@ autoUpdater.on("error", (err) => {
   if (stallTimer) clearTimeout(stallTimer);
 
   let userMessage = "Lỗi khi kiểm tra cập nhật";
-  if (msg.includes("ENOTFOUND") || msg.includes("ETIMEDOUT") || msg.includes("ECONNREFUSED")) {
-    userMessage = "Không thể kết nối đến server. Vui lòng kiểm tra mạng.";
+  let isDownloadFailure = false;
+
+  if (msg.includes("sha512") || msg.includes("checksum") || msg.includes("verification") || msg.includes("corrupt") || msg.includes("integrity")) {
+    userMessage = "Tệp cập nhật bị lỗi toàn vẹn (checksum). Bấm để tải thủ công từ GitHub.";
+    isDownloadFailure = true;
+  } else if (msg.includes("ENOTFOUND") || msg.includes("ETIMEDOUT") || msg.includes("ECONNREFUSED") || msg.includes("net::")) {
+    userMessage = "Không thể kết nối đến máy chủ cập nhật. Vui lòng kiểm tra mạng.";
   } else if (msg.includes("timeout")) {
-    userMessage = "Kết nối quá chậm. Vui lòng thử lại sau.";
+    userMessage = "Kết nối tải bản cập nhật quá chậm. Bấm để tải thủ công từ GitHub.";
+    isDownloadFailure = true;
   }
 
-  win?.webContents.send("update:error", userMessage);
+  win?.webContents.send("update:error", {
+    message: userMessage,
+    isDownloadFailure,
+    githubUrl: "https://github.com/hoaug-tran/uneti-schedule-app/releases/latest",
+  });
 });
 
 function createWindow() {
@@ -635,7 +711,11 @@ function createWindow() {
     });
   }
 
-  win.webContents.on("console-message", (event, level, message, line, sourceId) => {
+  win.webContents.on("console-message", (event, ...args) => {
+    const level = event.level ?? args[0];
+    const message = event.message ?? args[1];
+    const line = event.lineNumber ?? args[2];
+    const sourceId = event.sourceId ?? args[3];
     logger.info(`[renderer console] [${level}] ${message} (${sourceId}:${line})`);
   });
 
@@ -702,15 +782,14 @@ async function createTray() {
 
 async function updateTrayContextMenu() {
   if (!tray) return;
-  const enabled = await autoLauncher.isEnabled();
+  const enabled = isAutoLaunchEnabled();
   const contextMenu = Menu.buildFromTemplate([
     {
       label: i18n.t("trayStartWithWindows"),
       type: "checkbox",
       checked: enabled,
-      click: async (menuItem) => {
-        if (menuItem.checked) await autoLauncher.enable();
-        else await autoLauncher.disable();
+      click: (menuItem) => {
+        setAutoLaunch(menuItem.checked);
         updateTrayContextMenu();
       },
     },
@@ -838,6 +917,13 @@ function showWindow() {
 }
 
 app.whenReady().then(async () => {
+  await handlePostUpdateCleanup();
+  if (store.get("openAtLogin", false) && !isDev) {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      path: process.execPath,
+    });
+  }
   await createTray();
   createWindow();
   await bootstrapCookiesToSession();
@@ -846,6 +932,19 @@ app.whenReady().then(async () => {
   if (hasCookie) {
     logger.info("[main] Cookies found, fetching schedule");
     startCookieRefreshService(() => requireLogin("Session expired in background refresh"));
+    startClassReminderService({
+      getTodaySchedule: async () => {
+        const d = new Date();
+        const key = weekKey(d);
+        const schedule = await loadScheduleAsync(key);
+        return schedule?.data || [];
+      },
+      onNotificationClick: () => {
+        showWindow();
+      },
+      iconPath: path.join(__dirname, "../app/assets/uneti.ico"),
+    });
+
     try {
       const result0 = await getSchedule(0);
       const result1 = await getSchedule(1);
@@ -865,19 +964,6 @@ app.whenReady().then(async () => {
       }
 
       logger.info("[main] fetched schedule in background");
-
-      startClassReminderService({
-        getTodaySchedule: async () => {
-          const d = new Date();
-          const key = weekKey(d);
-          const schedule = await loadScheduleAsync(key);
-          return schedule?.data || [];
-        },
-        onNotificationClick: () => {
-          showWindow();
-        },
-        iconPath: path.join(__dirname, "../app/assets/uneti.ico"),
-      });
     } catch (err) {
       const errMsg = err?.message || String(err);
       logger.warn(`[main] fetch in background failed: ${errMsg}`);

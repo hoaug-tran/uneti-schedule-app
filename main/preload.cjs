@@ -50,7 +50,7 @@ contextBridge.exposeInMainWorld("widgetAPI", {
 
 contextBridge.exposeInMainWorld("academicAPI", {
   load: () => ipcRenderer.invoke("academic:load-file"),
-  refresh: () => ipcRenderer.invoke("academic:refresh"),
+  refresh: (options) => ipcRenderer.invoke("academic:refresh", options),
   plan: (target) => ipcRenderer.invoke("gpa:plan", target),
   simulate: (overrides) => ipcRenderer.invoke("gpa:simulate", overrides),
   customPlan: (target, selectedKeys, targetGradeOverrides) =>
@@ -87,6 +87,7 @@ contextBridge.exposeInMainWorld("loggerAPI", {
 contextBridge.exposeInMainWorld("appAPI", {
   getVersion: () => ipcRenderer.invoke("app:get-version"),
   setLanguage: (lang) => ipcRenderer.send("i18n:set-lang", lang),
+  openExternal: (url) => ipcRenderer.invoke("app:open-external", url),
 });
 
 contextBridge.exposeInMainWorld("networkAPI", {
