@@ -1,6 +1,7 @@
 import { net } from "electron";
 import { buildCookieHeader } from "./cookieManager.js";
 import { createAuthError } from "./sessionState.js";
+import { CONFIG } from "../config.js";
 import { logger } from "../utils/logger.js";
 
 function sanitizeUrlForLog(rawUrl) {
@@ -29,6 +30,7 @@ export async function callSupportApi({ endpoint, method = "GET", body = null, la
   const options = {
     method,
     headers,
+    signal: AbortSignal.timeout(CONFIG.HTTP_TIMEOUT_MS || 15000),
   };
 
   if (body) {
