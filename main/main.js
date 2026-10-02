@@ -153,6 +153,9 @@ async function handlePostUpdateCleanup() {
 
       try {
         await session.defaultSession.clearCache();
+        if (session.defaultSession.clearCodeCaches) {
+          await session.defaultSession.clearCodeCaches({});
+        }
       } catch {}
 
       if (store.get("openAtLogin", false) && !isDev) {
