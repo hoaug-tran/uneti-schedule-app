@@ -295,7 +295,17 @@ function showUpdateToast(state, data = {}) {
   }
 
   if (state === "error") {
-    toastManager.show(i18n.t("updateError"), { id: toastId, duration: 4000, type: "error" });
+    const errorMsg = typeof data === "object" ? data?.message || i18n.t("updateError") : String(data || i18n.t("updateError"));
+    const githubUrl = typeof data === "object" && data?.githubUrl ? data.githubUrl : "https://github.com/hoaug-tran/uneti-schedule-app/releases/latest";
+    const isClickable = Boolean(typeof data === "object" && data?.isDownloadFailure);
+
+    toastManager.show(errorMsg, {
+      id: toastId,
+      duration: isClickable ? 10000 : 4000,
+      type: "error",
+      clickable: isClickable,
+      onClick: isClickable ? () => window.appAPI?.openExternal?.(githubUrl) : undefined,
+    });
     return;
   }
 
@@ -314,9 +324,10 @@ function showUpdateToast(state, data = {}) {
       onClick: async () => {
         showUpdateToast("downloading", { progress: 0 });
         try {
-          await window.updateAPI?.install?.();
+          const ok = await window.updateAPI?.install?.();
+          if (!ok) showUpdateToast("error", { message: "Không thể tải bản cập nhật. Bấm để tải từ GitHub.", isDownloadFailure: true });
         } catch {
-          showUpdateToast("error");
+          showUpdateToast("error", { message: "Lỗi tải bản cập nhật. Bấm để tải từ GitHub.", isDownloadFailure: true });
         }
       },
     });
@@ -446,9 +457,9 @@ function registerIpcListeners() {
     }, 5000);
   });
 
-  window.updateAPI?.onError?.((msg) => {
-    window.loggerAPI?.error(`[Update] Error: ${msg}`);
-    showUpdateToast("error");
+  window.updateAPI?.onError?.((errData) => {
+    window.loggerAPI?.error(`[Update] Error: ${typeof errData === "object" ? JSON.stringify(errData) : errData}`);
+    showUpdateToast("error", errData);
   });
 
 function updateToolbarLabels() {
@@ -480,6 +491,9 @@ function updateToolbarLabels() {
 
   const btnPrevSpan = document.querySelector("#btn-prev-week span");
   if (btnPrevSpan) btnPrevSpan.textContent = i18n.t("previous");
+
+  const btnCurrentSpan = document.querySelector("#btn-current-week span");
+  if (btnCurrentSpan) btnCurrentSpan.textContent = i18n.t("currentWeek");
 
   const btnNextSpan = document.querySelector("#btn-next-week span");
   if (btnNextSpan) btnNextSpan.textContent = i18n.t("next");
@@ -556,6 +570,7 @@ async function render(isoDate, options = {}) {
 
     const currentWeekKey = window.dateAPI.weekKey(new Date());
     const thisWeekKey = window.dateAPI.weekKey(isoDate);
+    const isCurrentWeek = currentWeekKey === thisWeekKey;
 
     if (state === "ok" && currentWeekKey === thisWeekKey && payload && !options.isLanguageChange) {
       if (preFetchedWeek !== currentWeekKey) {
@@ -608,6 +623,8 @@ async function render(isoDate, options = {}) {
 
       const weekDays = getWeekDays(firstDay, lastDay);
       const locale = i18n.getLang() === "vi" ? "vi-VN" : "en-US";
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
       metaHtml = `${i18n.t("updated")}: ${new Date(updatedAt).toLocaleString(locale)}<br/>`;
       metaHtml += `<span class="week-range" style="font-weight:bold;color:white">${i18n.t("week")}: ${firstDay.toLocaleDateString(locale)} <i data-lucide="arrow-right" class="icon-inline"></i> ${lastDay.toLocaleDateString(locale)}</span>`;
@@ -617,9 +634,10 @@ async function render(isoDate, options = {}) {
       ${weekDays
           .map((d) => {
             const entries = grouped[d] ?? [];
+            const isToday = isCurrentWeek && d === todayStr;
             return `
-            <section class="day-col">
-              <header class="day-h">
+            <section class="day-col${isToday ? " is-today" : ""}">
+              <header class="day-h${isToday ? " is-today" : ""}">
                 ${new Date(d).toLocaleDateString(locale, {
                   weekday: "long",
                   day: "2-digit",
@@ -696,6 +714,9 @@ async function render(isoDate, options = {}) {
           <i data-lucide="chevron-left" class="icon"></i>
           <span>${i18n.t("previous")}</span>
         </button>
+        <button id="btn-current-week" class="nav-btn"${isCurrentWeek ? " disabled" : ""}>
+          <span>${i18n.t("currentWeek")}</span>
+        </button>
         <button id="btn-next-week" class="nav-btn">
           <span>${i18n.t("next")}</span>
           <i data-lucide="chevron-right" class="icon"></i>
@@ -729,6 +750,7 @@ async function render(isoDate, options = {}) {
     const btnHide = $("#btn-hide");
     const btnExit = $("#btn-exit");
     const btnPrevWeek = $("#btn-prev-week");
+    const btnCurrentWeek = $("#btn-current-week");
     const btnNextWeek = $("#btn-next-week");
     const btnTheme = $("#btn-theme");
     const btnEmptyLogin = $("#btn-empty-login");
@@ -799,12 +821,12 @@ async function render(isoDate, options = {}) {
             updateState.currentVersion = appVersionValue || "";
             showUpdateToast("available", { newVersion: res.version });
           } else if (res?.error) {
-            showUpdateToast("error");
+            showUpdateToast("error", { message: res.error, isDownloadFailure: false });
           } else {
             showUpdateToast("not-available", { version: res?.version });
           }
         } catch {
-          showUpdateToast("error");
+          showUpdateToast("error", { message: "Không thể kết nối đến máy chủ cập nhật. Bấm để tải từ GitHub.", isDownloadFailure: true });
         } finally {
           btnUpdate.disabled = false;
         }
@@ -1329,14 +1351,33 @@ async function render(isoDate, options = {}) {
           });
         };
 
-        const loadPromise = window.academicAPI?.load?.();
-        const refreshPromise = window.academicAPI?.refresh?.();
-        const delayPromise = new Promise((res) => setTimeout(res, 450));
+        const cached = await window.academicAPI?.load?.();
+        if (cached?.subjects?.length) {
+          await renderView(cached, "good", {}, [], {});
+          if (isOnline) {
+            window.academicAPI?.refresh?.({ force: false }).then((res) => {
+              if (res?.ok && res.data?.subjects?.length && currentActiveView === "gpa") {
+                renderView(res.data, "good", {}, [], {});
+              }
+            }).catch(() => {});
+          }
+          return;
+        }
 
-        const [academic, refreshed] = await Promise.all([loadPromise, refreshPromise]);
-        await delayPromise;
+        if (!isOnline) {
+          body.innerHTML = `
+            <div class="empty-state">
+              <i data-lucide="graduation-cap" class="empty-icon"></i>
+              <div class="empty-title">${i18n.t("gpaNoDataTitle")}</div>
+              <div class="empty-desc">${i18n.t("gpaNoDataDesc")}</div>
+            </div>
+          `;
+          if (window.lucide) window.lucide.createIcons();
+          return;
+        }
 
-        const data = refreshed?.data || academic;
+        const refreshed = await window.academicAPI?.refresh?.();
+        const data = refreshed?.data;
         if (!data?.subjects?.length) {
           body.innerHTML = `
             <div class="empty-state">
@@ -1391,7 +1432,7 @@ async function render(isoDate, options = {}) {
         createToast(loadingMsg, { id: "action-toast", duration: 0, type: "info" });
         try {
           if (isGpaView) {
-            const res = await window.academicAPI?.refresh?.();
+            const res = await window.academicAPI?.refresh?.({ force: true });
             if (res?.ok === false) {
               const errMsg = res?.auth ? i18n.t("sessionExpired") : (i18n.t("gpaRefreshError") || "Lỗi làm mới bảng điểm");
               createToast(errMsg, { id: "action-toast", duration: 3500, type: "error" });
@@ -1424,6 +1465,20 @@ async function render(isoDate, options = {}) {
           await changeWeek(-1);
         } finally {
           btnPrevWeek.disabled = false;
+        }
+      };
+    }
+
+    if (btnCurrentWeek) {
+      btnCurrentWeek.onclick = async () => {
+        if (btnCurrentWeek.disabled || isChangingWeek) return;
+        btnCurrentWeek.disabled = true;
+        try {
+          currentWeek = startOfWeek(new Date());
+          await render(window.dateAPI.weekKey(currentWeek));
+        } finally {
+          const isNowCurrent = window.dateAPI.weekKey(currentWeek) === window.dateAPI.weekKey(new Date());
+          btnCurrentWeek.disabled = isNowCurrent;
         }
       };
     }

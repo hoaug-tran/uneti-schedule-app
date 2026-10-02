@@ -304,6 +304,46 @@ button[disabled] {
   border-radius: var(--radius-lg);
   min-height: 100%;
   position: relative;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.day-col.is-today {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 15%,
+    rgba(255, 255, 255, 0.03) 85%,
+    transparent 100%
+  );
+  border: none;
+  box-shadow: none;
+  padding: 0 4px;
+  position: relative;
+}
+
+.day-col.is-today::before,
+.day-col.is-today::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.22) 15%,
+    rgba(255, 255, 255, 0.22) 85%,
+    transparent 100%
+  );
+}
+
+.day-col.is-today::before {
+  left: -7px;
+}
+
+.day-col.is-today::after {
+  right: -7px;
 }
 
 .day-col:not(:last-child)::after {
@@ -326,6 +366,45 @@ button[disabled] {
   background: var(--card);
   border-radius: var(--radius-md);
   border: 1px solid #2a2a2a;
+}
+
+.day-h.is-today {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+[data-theme="light"] .day-col.is-today {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.03) 15%,
+    rgba(0, 0, 0, 0.03) 85%,
+    transparent 100%
+  );
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="light"] .day-col.is-today::before,
+[data-theme="light"] .day-col.is-today::after {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.2) 15%,
+    rgba(0, 0, 0, 0.2) 85%,
+    transparent 100%
+  );
+}
+
+[data-theme="light"] .day-h.is-today {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-md);
+  color: #0f172a;
+  font-weight: 700;
 }
 
 .day-body {
