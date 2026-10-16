@@ -1,7 +1,7 @@
-import { weekKey, startOfWeek, formatYMDLocal, parseYMDLocal } from "../utils/date.js";
+import { weekKey, startOfWeek, formatYMDLocal, parseYMDLocal, vietnamNow } from "../utils/date.js";
 import { callSupportApi } from "./supportApi.js";
 import { getStudentId } from "./userStore.js";
-import { createAuthError, isAuthError } from "./sessionState.js";
+import { createAuthError, isAuthError, captureSession, assertSession } from "./sessionState.js";
 import {
   saveAllSchedules,
   loadScheduleAsync,
@@ -21,20 +21,20 @@ function dateToDMY(d) {
 }
 
 export async function clearAllSchedules() {
-  try {
-    await deleteAllSchedules();
-    logger.info("[clearAllSchedules] removed all schedules");
-  } catch (err) {
-    logger.warn("[clearAllSchedules] fail:", err?.message);
-  }
+  await deleteAllSchedules();
+  inFlightRequests.clear();
+  logger.info("[clearAllSchedules] removed all schedules");
 }
 
+function validPeriods(fromValue, toValue) {
+  const from = Number(fromValue ?? 0), to = Number(toValue ?? from);
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to > 30 || to < from) return [];
+  return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+}
 function mapClassItem(item) {
   const day = (item.NgayBatDau || "").slice(0, 10);
   const periods = [];
-  const from = item.TuTiet || 0;
-  const to = item.DenTiet || from;
-  for (let p = from; p <= to; p++) periods.push(p);
+  periods.push(...validPeriods(item.TuTiet, item.DenTiet));
 
   let type = "LT";
   const nameLower = (item.TenMonHoc || "").toLowerCase();
@@ -62,10 +62,7 @@ function mapClassItem(item) {
 
 function mapExamItem(item) {
   const day = (item.TC_SV_KetQuaHocTap_LichThiSinhVien_NgayThi || "").slice(0, 10);
-  const from = item.TC_SV_KetQuaHocTap_LichThiSinhVien_TuTiet || 0;
-  const to = item.TC_SV_KetQuaHocTap_LichThiSinhVien_DenTiet || from;
-  const periods = [];
-  for (let p = from; p <= to; p++) periods.push(p);
+  const periods = validPeriods(item.TC_SV_KetQuaHocTap_LichThiSinhVien_TuTiet, item.TC_SV_KetQuaHocTap_LichThiSinhVien_DenTiet);
 
   const room = (item.TC_SV_KetQuaHocTap_LichThiSinhVien_TenPhong || "").replace(/^Phòng học\//i, "").trim();
   const loaiThi = item.TC_SV_KetQuaHocTap_LichThiSinhVien_LoaiThi || "Thi";
@@ -97,12 +94,15 @@ function createOffsetsForDate(weekMonday) {
 }
 
 export async function getSchedule(offset = 0, baseDate = null) {
-  const reqKey = `${offset}:${baseDate || "current"}`;
+  if (!Number.isInteger(offset) || Math.abs(offset) > 520) throw new Error("Invalid week offset");
+  if (baseDate !== null && !Number.isFinite(new Date(baseDate).getTime())) throw new Error("Invalid schedule date");
+  const snapshot = captureSession();
+  const reqKey = snapshot.generation + ":" + offset + ":" + (baseDate || "current");
   if (inFlightRequests.has(reqKey)) {
     return inFlightRequests.get(reqKey);
   }
 
-  const p = executeGetSchedule(offset, baseDate);
+  const p = executeGetSchedule(offset, baseDate, snapshot);
   inFlightRequests.set(reqKey, p);
   try {
     return await p;
@@ -111,7 +111,7 @@ export async function getSchedule(offset = 0, baseDate = null) {
   }
 }
 
-async function executeGetSchedule(offset = 0, baseDate = null) {
+async function executeGetSchedule(offset = 0, baseDate = null, snapshot = captureSession()) {
   logger.debug(`[getSchedule] start offset: ${offset} baseDate: ${baseDate}`);
 
   let targetDate;
@@ -120,7 +120,7 @@ async function executeGetSchedule(offset = 0, baseDate = null) {
     d.setDate(d.getDate() + offset * 7);
     targetDate = startOfWeek(d);
   } else {
-    const d = new Date();
+    const d = vietnamNow();
     d.setDate(d.getDate() + offset * 7);
     targetDate = startOfWeek(d);
   }
@@ -130,10 +130,11 @@ async function executeGetSchedule(offset = 0, baseDate = null) {
 
   const studentId = await getStudentId();
   if (!studentId) {
-    if (cached) return { offsets: cached.offsets, weekStart: targetDate, data: cached.data };
+
     throw createAuthError("No student logged in. Please log in first.");
   }
 
+  assertSession(snapshot);
   const scheduleUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
   const examUrl = `${CONFIG.UNETI_EXAM_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
 
@@ -141,18 +142,23 @@ async function executeGetSchedule(offset = 0, baseDate = null) {
     const [schedJson, examJson] = await Promise.all([
       callSupportApi({
         endpoint: scheduleUrl,
+        signal: snapshot.signal,
         method: "GET",
         label: "schedule-classes",
       }),
       callSupportApi({
         endpoint: examUrl,
+        signal: snapshot.signal,
         method: "GET",
         label: "schedule-exams",
       }),
     ]);
 
-    const schedItems = schedJson?.body || [];
-    const examItems = examJson?.body || [];
+    assertSession(snapshot);
+    if (!Array.isArray(schedJson?.body) || !Array.isArray(examJson?.body)) throw new Error("Invalid schedule response");
+    const schedItems = schedJson.body;
+    const examItems = examJson.body;
+    if (schedItems.length + examItems.length > 50000) throw new Error("Schedule response too large");
 
     const mappedClasses = schedItems.map(mapClassItem).filter((c) => !!c.day);
     const mappedExams = examItems.map(mapExamItem).filter((c) => !!c.day);
@@ -190,7 +196,8 @@ async function executeGetSchedule(offset = 0, baseDate = null) {
       };
     }
 
-    await saveAllSchedules(batch);
+    await saveAllSchedules(batch, { owner: studentId, snapshot, replace: true });
+    assertSession(snapshot);
 
     return {
       offsets: requestedOffsets,
@@ -198,6 +205,7 @@ async function executeGetSchedule(offset = 0, baseDate = null) {
       data: requestedData,
     };
   } catch (err) {
+    assertSession(snapshot);
     if (isAuthError(err)) {
       if (cached) {
         logger.warn(`[getSchedule] Auth error, returning cached schedule with authError flag for ${requestedKey}`);
@@ -207,7 +215,7 @@ async function executeGetSchedule(offset = 0, baseDate = null) {
     }
     if (cached) {
       logger.info(`[getSchedule] API error, using cached schedule for ${requestedKey}`);
-      return { offsets: cached.offsets, weekStart: targetDate, data: cached.data };
+      return { offsets: cached.offsets, weekStart: targetDate, data: cached.data, stale: true };
     }
     throw err;
   }

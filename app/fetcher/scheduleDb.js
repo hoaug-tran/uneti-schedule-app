@@ -1,77 +1,46 @@
-import path from "path";
+import path from "node:path";
 import { getStoreDir } from "./storePath.js";
-import { readJson, writeJsonAtomic } from "./jsonStore.js";
-
-const SCHEDULES_FILE = "schedules.json";
-let memoryCache = null;
-let writeQueue = Promise.resolve();
-
-function queueWrite(fn) {
-  const next = writeQueue.then(fn, fn);
-  writeQueue = next;
-  return next;
+import { readJson, writeJsonAtomic, eraseJson } from "./jsonStore.js";
+import { getStudentId } from "./userStore.js";
+import { captureSession, assertSession, invalidateSession } from "./sessionState.js";
+import { CONFIG } from "../config.js";
+const getPath = () => path.join(getStoreDir(), "schedules.json");
+let queue = Promise.resolve();
+function enqueue(fn) { const next = queue.catch(() => {}).then(fn); queue = next; return next; }
+async function loadEnvelope(owner) {
+  const saved = await readJson(getPath());
+  return saved?.owner === owner && saved?.schema === 1 ? saved.weeks ?? {} : {};
 }
-
-function getSchedulesPath() {
-  const storeDir = getStoreDir();
-  return path.join(storeDir, SCHEDULES_FILE);
+export async function loadScheduleAsync(key) {
+  const snapshot = captureSession();
+  const owner = await getStudentId();
+  if (!owner) return null;
+  const weeks = await loadEnvelope(owner);
+  assertSession(snapshot);
+  const entry = weeks[key];
+  if (!entry || !Array.isArray(entry.data) || !Number.isFinite(entry.updated_at)) return null;
+  const age = Date.now() - entry.updated_at;
+  if (age < 0 || age > CONFIG.SCHEDULE_CACHE_MAX_AGE_MS) return null;
+  return { ...entry, stale: age > CONFIG.SCHEDULE_CACHE_TTL_MS };
 }
-
-async function loadSchedulesFromDisk() {
-  if (memoryCache !== null) {
-    return memoryCache;
-  }
-  const filePath = getSchedulesPath();
-  const data = await readJson(filePath, {});
-  memoryCache = data && typeof data === "object" ? data : {};
-  return memoryCache;
-}
-
-async function saveSchedulesToDisk(schedules) {
-  try {
-    memoryCache = schedules;
-    const filePath = getSchedulesPath();
-    await writeJsonAtomic(filePath, schedules);
-  } catch (err) {
-    console.warn("[scheduleDb] save failed:", err?.message);
-  }
-}
-
-export async function saveSchedule(weekKey, weekStart, data, offsets) {
-  return queueWrite(async () => {
-    const schedules = await loadSchedulesFromDisk();
-    schedules[weekKey] = {
-      week_start: weekStart,
-      data,
-      offsets,
-      updated_at: Date.now(),
-    };
-    await saveSchedulesToDisk(schedules);
-  });
-}
-
-export async function saveAllSchedules(batch) {
-  return queueWrite(async () => {
-    const schedules = await loadSchedulesFromDisk();
-    for (const [wKey, val] of Object.entries(batch)) {
-      schedules[wKey] = val;
+export function saveAllSchedules(batch, { owner, snapshot = captureSession(), replace = false } = {}) {
+  return enqueue(async () => {
+    assertSession(snapshot);
+    const current = await getStudentId();
+    if (!current || (owner && owner !== current)) throw new Error("Session owner changed");
+    const previous = replace ? {} : await loadEnvelope(current);
+    const weeks = { ...previous, ...batch };
+    for (const [key, value] of Object.entries(weeks)) {
+      if (!Number.isFinite(value?.updated_at) || Date.now() - value.updated_at > CONFIG.SCHEDULE_CACHE_MAX_AGE_MS) delete weeks[key];
     }
-    await saveSchedulesToDisk(schedules);
+    await writeJsonAtomic(getPath(), { schema: 1, owner: current, weeks }, { guard: () => assertSession(snapshot) });
   });
 }
-
-export async function loadScheduleAsync(weekKey) {
-  const schedules = await loadSchedulesFromDisk();
-  return schedules[weekKey] || null;
+export function saveSchedule(key, weekStart, data, offsets) {
+  return saveAllSchedules({ [key]: { week_start: weekStart, data, offsets, updated_at: Date.now() } });
 }
-
-export async function deleteAllSchedules() {
-  return queueWrite(async () => {
-    memoryCache = {};
-    await saveSchedulesToDisk({});
-  });
+export function deleteAllSchedules() {
+  invalidateSession();
+  return enqueue(() => eraseJson(getPath()));
 }
-
-export function closeDatabase() {
-  memoryCache = null;
-}
+export async function closeDatabase() { await queue; }

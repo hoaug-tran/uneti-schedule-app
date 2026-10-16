@@ -1,30 +1,30 @@
 import { callSupportApi } from "./supportApi.js";
 import { saveAcademicResults, loadAcademicResults } from "./academicDb.js";
 import { getStudentId } from "./userStore.js";
-import { createAuthError } from "./sessionState.js";
+import { createAuthError, captureSession, assertSession, isAuthError } from "./sessionState.js";
 import { CONFIG } from "../config.js";
 import { API_FIELDS, NON_GPA_SUBJECT_PATTERNS } from "../constants.js";
-import { normalizeText, courseKeyOf } from "../utils/format.js";
+import { normalizeText, courseKeyOf, numberOf } from "../utils/format.js";
 import { logger } from "../utils/logger.js";
 
-let activeFetchPromise = null;
-let lastFetchTimestamp = 0;
+const activeFetches = new Map();
+const lastFetches = new Map();
 
 export async function getAcademicResults(options = {}) {
+  const snapshot = captureSession();
+  const requestKey = snapshot.generation;
   const force = options?.force === true;
   const throttleMs = CONFIG.ACADEMIC_REFRESH_THROTTLE_MS || 60000;
-  if (!force && Date.now() - lastFetchTimestamp < throttleMs) {
+  if (!force && Date.now() - (lastFetches.get(requestKey) || 0) < throttleMs) {
     const cached = await loadAcademicResults();
     if (cached?.subjects?.length) {
       return cached;
     }
   }
 
-  if (activeFetchPromise) {
-    return activeFetchPromise;
-  }
+  if (activeFetches.has(requestKey)) return activeFetches.get(requestKey);
 
-  activeFetchPromise = (async () => {
+  const activeFetchPromise = (async () => {
     try {
       logger.info("[academic] fetching academic results from support API");
 
@@ -33,30 +33,35 @@ export async function getAcademicResults(options = {}) {
         throw createAuthError("Student ID not found. Please log in to UNETI Support.");
       }
 
+      assertSession(snapshot);
       const gradesUrl = `${CONFIG.UNETI_GRADES_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
       const gpaUrl = `${CONFIG.UNETI_GPA_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
       const scheduleUrl = `${CONFIG.UNETI_SCHEDULE_ENDPOINT}?${API_FIELDS.GRADES_STUDENT_ID}=${encodeURIComponent(studentId)}`;
       const curriculumUrl = `${CONFIG.UNETI_CURRICULUM_ENDPOINT}?${API_FIELDS.CURRICULUM_STUDENT_ID}=${encodeURIComponent(studentId)}`;
 
       const [gradesJson, gpaJson, schedJson, curriculumJson] = await Promise.all([
-        callSupportApi({ endpoint: gradesUrl, method: "GET", label: "academic-grades" }),
-        callSupportApi({ endpoint: gpaUrl, method: "GET", label: "academic-gpa" }),
-        callSupportApi({ endpoint: scheduleUrl, method: "GET", label: "academic-schedule" }).catch(() => null),
-        callSupportApi({ endpoint: curriculumUrl, method: "GET", label: "academic-curriculum" }).catch(() => null),
+        callSupportApi({ signal: snapshot.signal, endpoint: gradesUrl, method: "GET", label: "academic-grades" }),
+        callSupportApi({ signal: snapshot.signal, endpoint: gpaUrl, method: "GET", label: "academic-gpa" }),
+        callSupportApi({ signal: snapshot.signal, endpoint: scheduleUrl, method: "GET", label: "academic-schedule" }).catch((error) => { if (isAuthError(error) || snapshot.signal.aborted) throw error; return null; }),
+        callSupportApi({ signal: snapshot.signal, endpoint: curriculumUrl, method: "GET", label: "academic-curriculum" }).catch((error) => { if (isAuthError(error) || snapshot.signal.aborted) throw error; return null; }),
       ]);
 
+  assertSession(snapshot);
   const gradesBody = gradesJson?.body || [];
   const gpaBody = gpaJson?.body || [];
   const schedBody = schedJson?.body || [];
   const ctkBody = curriculumJson?.body || (Array.isArray(curriculumJson) ? curriculumJson : []);
 
+  for (const rows of [gradesBody, gpaBody, schedBody, ctkBody]) {
+    if (!Array.isArray(rows) || rows.length > 10000 || rows.some(row => !row || typeof row !== "object" || Array.isArray(row))) throw new Error("Invalid academic response");
+  }
   const studentKhoaHoc = ctkBody[0]?.[API_FIELDS.CURRICULUM_KHOA_HOC];
   const studentNganhHoc = ctkBody[0]?.[API_FIELDS.CURRICULUM_NGANH_HOC];
 
   let majorCtkBody = [];
   if (studentKhoaHoc && studentNganhHoc && CONFIG.UNETI_MAJOR_CURRICULUM_ENDPOINT) {
     const majorCurriculumUrl = `${CONFIG.UNETI_MAJOR_CURRICULUM_ENDPOINT}?KhoaHoc=${encodeURIComponent(studentKhoaHoc)}&NganhHoc=${encodeURIComponent(studentNganhHoc)}`;
-    const majorJson = await callSupportApi({ endpoint: majorCurriculumUrl, method: "GET", label: "academic-major-curriculum" }).catch(() => null);
+    const majorJson = await callSupportApi({ signal: snapshot.signal, endpoint: majorCurriculumUrl, method: "GET", label: "academic-major-curriculum" }).catch((error) => { if (isAuthError(error) || snapshot.signal.aborted) throw error; return null; });
     majorCtkBody = majorJson?.body || (Array.isArray(majorJson) ? majorJson : []);
   }
 
@@ -173,7 +178,7 @@ export async function getAcademicResults(options = {}) {
       }
     }
 
-    const credits = g[API_FIELDS.GRADES_CREDITS] ?? matchedCurriculum?.credits ?? 0;
+    const credits = numberOf(g[API_FIELDS.GRADES_CREDITS] ?? matchedCurriculum?.credits) ?? 0;
     const excludedFromGpa =
       isMarkedExclude ||
       (matchedCurriculum ? !matchedCurriculum.isTinhTBC : false) ||
@@ -238,7 +243,7 @@ export async function getAcademicResults(options = {}) {
       }
     }
 
-    const credits = matchedCurriculum?.credits ?? Number(item.SoTinChi ?? item[API_FIELDS.GRADES_CREDITS]) ?? 0;
+    const credits = matchedCurriculum?.credits ?? numberOf(item.SoTinChi ?? item[API_FIELDS.GRADES_CREDITS]) ?? 0;
     const excludedFromGpa =
       (matchedCurriculum ? !matchedCurriculum.isTinhTBC : false) ||
       isPatternExcluded ||
@@ -282,14 +287,18 @@ export async function getAcademicResults(options = {}) {
     semesterSummaries,
   };
 
-    await saveAcademicResults(parsed);
+    assertSession(snapshot);
+    await saveAcademicResults(parsed, { owner: studentId, snapshot });
+    assertSession(snapshot);
     logger.info(`[academic] saved ${subjects.length} subjects and GPA summaries`);
-    lastFetchTimestamp = Date.now();
+    lastFetches.clear();
+    lastFetches.set(requestKey, Date.now());
     return parsed;
   } finally {
-    activeFetchPromise = null;
+    activeFetches.delete(requestKey);
   }
   })();
 
+  activeFetches.set(requestKey, activeFetchPromise);
   return activeFetchPromise;
 }
