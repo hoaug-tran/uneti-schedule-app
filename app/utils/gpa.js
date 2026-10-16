@@ -7,6 +7,80 @@ import {
 } from "../constants.js";
 import { numberOf, courseKeyOf } from "./format.js";
 
+export const MAX_SUBJECTS = 500;
+export const MAX_SUBJECT_CREDIT = 30;
+export const MAX_TOTAL_CREDITS = 600;
+
+export function validateOverrides(overrides) {
+  if (!overrides) return;
+  if (typeof overrides !== "object" || Array.isArray(overrides)) {
+    throw new TypeError("Overrides must be an object");
+  }
+  for (const key of Object.keys(overrides)) {
+    if (!Object.prototype.hasOwnProperty.call(overrides, key)) continue;
+    const raw = overrides[key];
+    if (raw === undefined || raw === null || raw === "") continue;
+    const score = numberOf(raw);
+    const grade = score === null ? null : gradeOfScore10(score);
+    if (!grade) {
+      throw new Error(`Invalid predicted score for ${key}`);
+    }
+  }
+}
+
+export function validateTargetGradeOverrides(overrides) {
+  if (!overrides) return;
+  if (typeof overrides !== "object" || Array.isArray(overrides)) {
+    throw new TypeError("Target grade overrides must be an object");
+  }
+  for (const key of Object.keys(overrides)) {
+    if (!Object.prototype.hasOwnProperty.call(overrides, key)) continue;
+    const grade = overrides[key];
+    if (grade === undefined || grade === null || grade === "") continue;
+    const normalized = String(grade).trim().toUpperCase();
+    if (!Object.prototype.hasOwnProperty.call(LETTER_POINTS, normalized)) {
+      throw new Error(`Invalid target grade override for ${key}`);
+    }
+  }
+}
+
+export function validateSubjects(subjects) {
+  if (subjects === null || subjects === undefined) return;
+  if (!Array.isArray(subjects)) {
+    throw new TypeError("Subjects must be an array");
+  }
+  if (subjects.length > MAX_SUBJECTS) {
+    throw new Error(`Subject count exceeds limit of ${MAX_SUBJECTS}`);
+  }
+  for (let i = 0; i < subjects.length; i++) {
+    const row = subjects[i];
+    if (!row || typeof row !== "object") continue;
+    const key = courseKeyOf(row) || `row_${i}`;
+    const rawCredits = row?.credits ?? row?.soTinChi ?? row?.tinChi;
+    if (rawCredits !== undefined && rawCredits !== null && rawCredits !== "") {
+      const credits = numberOf(rawCredits);
+      if (credits === null || credits < 0 || credits > MAX_SUBJECT_CREDIT) {
+        throw new Error(`Invalid credits for ${key}`);
+      }
+    }
+    if (!isGpaSubject(row)) continue;
+    const rawFinal = row?.finalScore ?? row?.diemTongKet;
+    if (rawFinal !== undefined && rawFinal !== null && rawFinal !== "") {
+      const finalScore = numberOf(rawFinal);
+      if (finalScore === null || finalScore < 0 || finalScore > 10) {
+        throw new Error(`Invalid final score for ${key}`);
+      }
+    }
+    const rawPoint = row?.gradePoint ?? row?.diemTinChi;
+    if (rawPoint !== undefined && rawPoint !== null && rawPoint !== "") {
+      const point = numberOf(rawPoint);
+      if (point === null || point < 0 || point > 4) {
+        throw new Error(`Invalid grade point for ${key}`);
+      }
+    }
+  }
+}
+
 function creditsOf(row) {
   return numberOf(row?.credits ?? row?.soTinChi ?? row?.tinChi);
 }
@@ -38,7 +112,8 @@ export function gradePointOf(row) {
   if (point !== null && point >= 0 && point <= 4) return point;
   const scoreGrade = gradeOfScore10(row?.finalScore ?? row?.diemTongKet);
   if (scoreGrade) return scoreGrade.point;
-  return LETTER_POINTS[String(row?.letter ?? row?.diemChu ?? "").trim().toUpperCase()] ?? null;
+  const letterKey = String(row?.letter ?? row?.diemChu ?? "").trim().toUpperCase();
+  return Object.prototype.hasOwnProperty.call(LETTER_POINTS, letterKey) ? LETTER_POINTS[letterKey] : null;
 }
 
 export function isGpaSubject(row) {
@@ -69,6 +144,8 @@ export function isGpaSubject(row) {
 }
 
 export function deduplicateGpaSubjects(subjects = [], overrides = {}) {
+  validateSubjects(subjects);
+  validateOverrides(overrides);
   const selected = new Map();
   subjects.forEach((row, sourceIndex) => {
     if (!isGpaSubject(row)) return;
@@ -78,13 +155,16 @@ export function deduplicateGpaSubjects(subjects = [], overrides = {}) {
     let point = gradePointOf(row);
     let finalScore = row?.finalScore ?? row?.diemTongKet ?? null;
     let letter = row?.letter ?? row?.diemChu ?? "";
-    if (overrides && overrides[key] !== undefined && overrides[key] !== "" && overrides[key] !== null) {
-      const score = numberOf(overrides[key]);
-      const grade = score === null ? null : gradeOfScore10(score);
-      if (grade) {
-        point = grade.point;
-        finalScore = grade.score;
-        letter = grade.letter;
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, key)) {
+      const rawOverride = overrides[key];
+      if (rawOverride !== undefined && rawOverride !== "" && rawOverride !== null) {
+        const score = numberOf(rawOverride);
+        const grade = score === null ? null : gradeOfScore10(score);
+        if (grade) {
+          point = grade.point;
+          finalScore = grade.score;
+          letter = grade.letter;
+        }
       }
     }
     if (point === null) return;
@@ -100,6 +180,10 @@ export function deduplicateGpaSubjects(subjects = [], overrides = {}) {
     const current = selected.get(key);
     if (!current || candidate.point > current.point) selected.set(key, candidate);
   });
+  const totalCredits = [...selected.values()].reduce((sum, s) => sum + s.credit, 0);
+  if (totalCredits > MAX_TOTAL_CREDITS) {
+    throw new Error(`Total credits exceed limit of ${MAX_TOTAL_CREDITS}`);
+  }
   return [...selected.values()];
 }
 
@@ -111,9 +195,16 @@ export function calculateGpa(subjects = []) {
 }
 
 export function simulateGpa(subjects = [], overrides = {}) {
+  validateOverrides(overrides);
   const selected = deduplicateGpaSubjects(subjects, overrides);
   const simulated = selected.map((subject) => {
-    const score = numberOf(overrides[subject.courseKey]);
+    let score = null;
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, subject.courseKey)) {
+      const raw = overrides[subject.courseKey];
+      if (raw !== undefined && raw !== null && raw !== "") {
+        score = numberOf(raw);
+      }
+    }
     const grade = score === null ? null : gradeOfScore10(score);
     if (score !== null && !grade) throw new Error(`Invalid predicted score for ${subject.courseKey}`);
     return grade ? { ...subject, finalScore: grade.score, point: grade.point, letter: grade.letter } : subject;
@@ -131,9 +222,15 @@ export function simulateGpa(subjects = [], overrides = {}) {
   };
 }
 
-function targetOf(targetKey) {
-  const target = GPA_TARGETS[targetKey] ?? numberOf(targetKey);
-  if (target === null || target < 0 || target > 4) throw new Error("Invalid GPA target");
+export function targetOf(targetKey) {
+  if (typeof targetKey !== "string" && typeof targetKey !== "number") {
+    throw new Error("Invalid GPA target");
+  }
+  const hasNamed = typeof targetKey === "string" && Object.prototype.hasOwnProperty.call(GPA_TARGETS, targetKey);
+  const target = hasNamed ? GPA_TARGETS[targetKey] : numberOf(targetKey);
+  if (target === null || typeof target !== "number" || !Number.isFinite(target) || target < 0 || target > 4) {
+    throw new Error("Invalid GPA target");
+  }
   return target;
 }
 
@@ -237,6 +334,7 @@ export function planGpa(subjects = [], targetKey) {
 
 export function solveCustomGpaPlan(subjects = [], targetKey = "good", selectedKeys = [], targetGradeOverrides = {}) {
   const target = targetOf(targetKey);
+  validateTargetGradeOverrides(targetGradeOverrides);
   const base = calculateGpa(subjects);
   const requiredGain = Math.ceil(Math.max(0, target * base.credits - base.gpa * base.credits) * 2 - 1e-9);
 
@@ -296,9 +394,12 @@ export function solveCustomGpaPlan(subjects = [], targetKey = "good", selectedKe
   let states = new Map([[0, []]]);
   for (const subject of selectedSubjects) {
     const next = new Map();
-    const explicitGrade = targetGradeOverrides[subject.courseKey];
+    const rawGrade = (targetGradeOverrides && Object.prototype.hasOwnProperty.call(targetGradeOverrides, subject.courseKey))
+      ? targetGradeOverrides[subject.courseKey]
+      : undefined;
+    const explicitGrade = rawGrade ? String(rawGrade).trim().toUpperCase() : undefined;
     let candidates = candidatesOf(subject);
-    if (explicitGrade && LETTER_POINTS[explicitGrade] !== undefined) {
+    if (explicitGrade && Object.prototype.hasOwnProperty.call(LETTER_POINTS, explicitGrade)) {
       const p = LETTER_POINTS[explicitGrade];
       if (p > subject.point) {
         candidates = [{ point: p, letter: explicitGrade, gain: Math.round((p - subject.point) * subject.credit * 2) }];

@@ -2,7 +2,11 @@ import { RANK_THRESHOLDS } from "../constants.js";
 
 export function numberOf(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  const parsed = Number.parseFloat(String(value ?? "").trim().replace(",", "."));
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(trimmed)) return null;
+  const parsed = Number(trimmed.replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
 }
 
