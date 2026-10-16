@@ -1756,3 +1756,12 @@ button[disabled] {
   width: 14px;
   height: 14px;
 }
+
+/* Keep controls usable on small work areas and at high display scaling. */
+html, body { max-width: 100vw; max-height: 100vh; }
+.shell { min-width: 0; max-width: 100%; }
+.actions, .left-group { flex-wrap: wrap; }
+.body { min-width: 0; overflow: auto; }
+button:focus-visible, [role="option"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (max-width: 700px) { .calendar { overflow-x: auto; } .head { flex-wrap: wrap; } .gpa-panel { overflow-x: auto; } }
+@media (forced-colors: active) { .card, .gpa-panel, .toast { border: 1px solid CanvasText; } }

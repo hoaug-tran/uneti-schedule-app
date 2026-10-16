@@ -1,5 +1,6 @@
 import {
   startOfWeek,
+  vietnamNow,
   getWeekDays,
   periodTime,
   periodSpan,
@@ -18,7 +19,8 @@ import { LETTER_POINTS } from "./constants.js";
 import { gradeOfScore10 } from "./utils/gpa.js";
 
 let appVersionValue = null;
-let currentWeek = startOfWeek(new Date());
+let currentWeek = startOfWeek(vietnamNow());
+let gpaViewController = null;
 let preFetchedWeek = null;
 let justLoggedIn = false;
 let activeOpenGpaView = null;
@@ -153,7 +155,7 @@ function setStatus(msg) {
 }
 
 function byDay(data) {
-  const m = {};
+  const m = Object.create(null);
   for (const x of data) (m[x.day] ??= []).push(x);
   return m;
 }
@@ -466,7 +468,7 @@ function updateToolbarLabels() {
   const version = appVersionValue || "";
   const titleSpan = document.querySelector(".title span");
   if (titleSpan) {
-    titleSpan.innerHTML = `${i18n.t("title")}${version ? ` <span class="version-label">v${version}</span>` : ""}`;
+    titleSpan.innerHTML = `${i18n.t("title")}${version ? ` <span class="version-label">v${escapeHtml(version)}</span>` : ""}`;
   }
 
   const btnLangSpan = document.querySelector("#btn-lang span");
@@ -533,6 +535,7 @@ const calcSemGpa = (items, semSummary) => {
 };
 
 async function render(isoDate, options = {}) {
+  gpaViewController?.abort();
   currentActiveView = "schedule";
   const el = $("#content");
   window.loggerAPI?.debug(`[render] START, isoDate: ${isoDate}`);
@@ -568,7 +571,7 @@ async function render(isoDate, options = {}) {
       loginLabel = i18n.t("login");
     }
 
-    const currentWeekKey = window.dateAPI.weekKey(new Date());
+    const currentWeekKey = window.dateAPI.weekKey(vietnamNow());
     const thisWeekKey = window.dateAPI.weekKey(isoDate);
     const isCurrentWeek = currentWeekKey === thisWeekKey;
 
@@ -623,10 +626,11 @@ async function render(isoDate, options = {}) {
 
       const weekDays = getWeekDays(firstDay, lastDay);
       const locale = i18n.getLang() === "vi" ? "vi-VN" : "en-US";
-      const now = new Date();
+      const now = vietnamNow();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
       metaHtml = `${i18n.t("updated")}: ${new Date(updatedAt).toLocaleString(locale)}<br/>`;
+      if (payload.stale) metaHtml += `<span class="cache-stale" role="status">${i18n.t("cachedDataWarning")}</span><br/>`;
       metaHtml += `<span class="week-range" style="font-weight:bold;color:white">${i18n.t("week")}: ${firstDay.toLocaleDateString(locale)} <i data-lucide="arrow-right" class="icon-inline"></i> ${lastDay.toLocaleDateString(locale)}</span>`;
 
       bodyHtml = `
@@ -652,10 +656,10 @@ async function render(isoDate, options = {}) {
                             <article class="card">
                               <div class="subject">${escapeHtml(s.subject)}</div>
                               <div class="line period">
-                                ${i18n.t("period")} ${periodSpan(s.periods)}
+                                ${i18n.t("period")} ${escapeHtml(periodSpan(s.periods))}
                                 <span class="sep"> | </span>${periodTime(s.periods)}
                                 <span class="sep"> | </span>${escapeHtml(s.session)}
-                                <span class="tag type-${(s.type || "").toLowerCase()}">${escapeHtml(s.type)}</span>
+                                <span class="tag type-${escapeHtml((s.type || "").toLowerCase())}">${escapeHtml(s.type)}</span>
                               </div>
                               <div class="line room">${escapeHtml(cleanRoom(s.room || ""))}</div>
                               ${s.teacher
@@ -680,7 +684,7 @@ async function render(isoDate, options = {}) {
     <div class="head">
       <div class="title">
         <img src="assets/uneti.webp" class="logo" alt="logo" />
-        <span>${i18n.t("title")}${version ? ` <span class="version-label">v${version}</span>` : ""}</span>
+        <span>${i18n.t("title")}${version ? ` <span class="version-label">v${escapeHtml(version)}</span>` : ""}</span>
       </div>
       <div class="actions">
         <div class="left-group">
@@ -907,6 +911,10 @@ async function render(isoDate, options = {}) {
           customSelectedKeys = [],
           customGradeOverrides = {}
         ) => {
+          gpaViewController?.abort();
+          const viewController = new AbortController();
+          gpaViewController = viewController;
+          const viewSignal = viewController.signal;
           if (footerBar) footerBar.style.display = "none";
           if (!data?.subjects?.length) {
             body.innerHTML = `<div class="gpa-panel"><div class="gpa-head"><div><h3 class="gpa-head-title">${i18n.t("gpaNoDataTitle")}</h3><p class="gpa-head-sub">${i18n.t("gpaNoDataDesc")}</p></div></div></div>`;
@@ -940,13 +948,14 @@ async function render(isoDate, options = {}) {
           }
 
           const simulation = await window.academicAPI?.simulate?.(effectiveOverrides);
+          if (viewSignal.aborted) return;
           const projected = simulation?.ok ? simulation.data : null;
 
           const groups = data.subjects.reduce((acc, s) => {
             const sem = s.semester || i18n.t("unknownSemester");
             (acc[sem] ||= []).push(s);
             return acc;
-          }, {});
+          }, Object.create(null));
 
           const parseSemKey = (name, subjects = []) => {
             const isPendingGroup = subjects.length > 0 && subjects.every((s) => s.isPending || (!s.letter && s.gradePoint === null && s.finalScore === null));
@@ -1047,7 +1056,7 @@ async function render(isoDate, options = {}) {
               <tbody>
                 <tr><td>GPA / 4.0</td><td>${displayCurrentGpa4}</td><td><b>${projectedGpa.toFixed(2)}</b></td><td>${deltaSign(delta4)}</td></tr>
                 ${currentGpa10 != null ? `<tr><td>GPA / 10</td><td>${currentGpa10.toFixed(2)}</td><td>${projectedGpa10 != null ? projectedGpa10.toFixed(2) : '<i data-lucide="minus" class="icon-inline"></i>'}</td><td>${deltaSign(delta10)}</td></tr>` : ""}
-                <tr><td>${i18n.t("gpaSummaryCredits")}</td><td>${accCredits}</td><td><b>${projectedAccCredits}</b></td><td>${additionalCredits > 0 ? `<span class="gpa-delta-up">+${additionalCredits} TC</span>` : `<span class="gpa-delta-eq"><i data-lucide="minus" class="icon-inline"></i></span>`}</td></tr>
+                <tr><td>${i18n.t("gpaSummaryCredits")}</td><td>${escapeHtml(accCredits)}</td><td><b>${projectedAccCredits}</b></td><td>${additionalCredits > 0 ? `<span class="gpa-delta-up">+${additionalCredits} TC</span>` : `<span class="gpa-delta-eq"><i data-lucide="minus" class="icon-inline"></i></span>`}</td></tr>
                 ${rank ? `<tr><td>${i18n.t("gpaSummaryRank")}</td><td>${escapeHtml(rank)}</td><td><b>${escapeHtml(projectedRank)}</b></td><td>${deltaRankHtml}</td></tr>` : ""}
               </tbody>
             </table>
@@ -1148,7 +1157,7 @@ async function render(isoDate, options = {}) {
 
               return `<tr>
                 <td class="gpa-col-name">${escapeHtml(s.subjectName)}</td>
-                <td class="gpa-col-tc gpa-cell-center">${s.credits ?? "-"}</td>
+                <td class="gpa-col-tc gpa-cell-center">${escapeHtml(s.credits ?? "-")}</td>
                 <td class="gpa-col-letter gpa-cell-center">${letterCell}</td>
                 <td class="gpa-col-score gpa-cell-center">${input}</td>
                 <td class="gpa-col-suggest gpa-cell-center">${suggestionCell}</td>
@@ -1263,8 +1272,8 @@ async function render(isoDate, options = {}) {
           });
 
           document.addEventListener("click", () => {
-            body.querySelectorAll(".gpa-target-dropdown.open").forEach((d) => d.classList.remove("open"));
-          });
+            body.querySelectorAll(".gpa-target-dropdown.open").forEach((d) => { d.classList.remove("open"); d.querySelector("button")?.setAttribute("aria-expanded", "false"); });
+          }, { signal: viewSignal });
 
           const targetBtn = document.getElementById("gpa-target-btn");
           const targetList = document.getElementById("gpa-target-list");
@@ -1284,10 +1293,11 @@ async function render(isoDate, options = {}) {
               }
             }));
             document.addEventListener("click", (e) => {
-              if (!targetWrap.contains(e.target)) targetWrap.classList.remove("open");
-            }, { once: false, capture: false });
+              if (!targetWrap.contains(e.target)) { targetWrap.classList.remove("open"); targetBtn.setAttribute("aria-expanded", "false"); }
+            }, { signal: viewSignal });
           }
 
+          enableDropdownKeyboard(body, viewSignal);
           body.querySelectorAll(".gpa-score-input").forEach((inp) => {
             inp.addEventListener("input", (event) => {
               const raw = event.target.value;
@@ -1443,7 +1453,11 @@ async function render(isoDate, options = {}) {
             }
             createToast(i18n.t("gpaRefreshSuccess") || "Đã cập nhật bảng điểm & GPA!", { id: "action-toast", duration: 3000, type: "success" });
           } else {
-            await window.widgetAPI.refresh();
+            const refreshed = await window.widgetAPI.refresh();
+            if (!refreshed?.ok) {
+              createToast(refreshed?.auth ? i18n.t("sessionExpired") : i18n.t("fetchError"), { id: "action-toast", duration: 3500, type: "error" });
+              return;
+            }
             createToast(i18n.t("fetchSuccess"), { id: "action-toast", duration: 3000, type: "success" });
           }
         } catch {
@@ -1474,10 +1488,10 @@ async function render(isoDate, options = {}) {
         if (btnCurrentWeek.disabled || isChangingWeek) return;
         btnCurrentWeek.disabled = true;
         try {
-          currentWeek = startOfWeek(new Date());
+          currentWeek = startOfWeek(vietnamNow());
           await render(window.dateAPI.weekKey(currentWeek));
         } finally {
-          const isNowCurrent = window.dateAPI.weekKey(currentWeek) === window.dateAPI.weekKey(new Date());
+          const isNowCurrent = window.dateAPI.weekKey(currentWeek) === window.dateAPI.weekKey(vietnamNow());
           btnCurrentWeek.disabled = isNowCurrent;
         }
       };
@@ -1506,7 +1520,7 @@ async function render(isoDate, options = {}) {
 
   } catch (e) {
     window.loggerAPI?.error(`[render] Exception: ${e?.message ?? e}`);
-    el.innerHTML = `<div class="empty">${i18n.t("renderError")} ${e?.message ?? e}</div>`;
+    el.innerHTML = `<div class="empty">${i18n.t("renderError")} ${escapeHtml(e?.message ?? e)}</div>`;
   } finally {
     const overlay = document.getElementById("loading-overlay");
     if (overlay) {
@@ -1620,4 +1634,39 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initApp);
 } else {
   initApp();
+}
+
+function enableDropdownKeyboard(root, signal) {
+  const wraps = [...root.querySelectorAll(".gpa-target-dropdown"), ...root.querySelectorAll("#gpa-target-wrap")];
+  for (const wrap of wraps) {
+    const trigger = wrap.querySelector("button");
+    const options = [...wrap.querySelectorAll(".gpa-target-item, li[data-val]")];
+    if (!trigger || !options.length) continue;
+    const menu = options[0].parentElement;
+    menu.setAttribute("role", "listbox");
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+    for (const option of options) { option.setAttribute("role", "option"); option.tabIndex = -1; option.setAttribute("aria-selected", String(option.classList.contains("active") || option.classList.contains("selected"))); }
+    const close = () => { wrap.classList.remove("open"); trigger.setAttribute("aria-expanded", "false"); };
+    trigger.addEventListener("click", () => queueMicrotask(() => { if (!signal.aborted) trigger.setAttribute("aria-expanded", String(wrap.classList.contains("open"))); }), { signal });
+    trigger.addEventListener("keydown", event => {
+      if (!["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation();
+      if (event.key === "Escape") { close(); return; }
+      wrap.classList.add("open"); trigger.setAttribute("aria-expanded", "true");
+      options[event.key === "ArrowUp" ? options.length - 1 : 0].focus();
+    }, { signal });
+    for (const [index, option] of options.entries()) option.addEventListener("keydown", event => {
+      let next = index;
+      if (event.key === "ArrowDown") next = (index + 1) % options.length;
+      else if (event.key === "ArrowUp") next = (index + options.length - 1) % options.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = options.length - 1;
+      else if (event.key === "Escape") { event.preventDefault(); close(); trigger.focus(); return; }
+      else if (["Enter", " "].includes(event.key)) { event.preventDefault(); option.click(); close(); if (trigger.isConnected) trigger.focus(); return; }
+      else return;
+      event.preventDefault(); options[next].focus();
+    }, { signal });
+    wrap.addEventListener("focusout", event => { if (!wrap.contains(event.relatedTarget)) close(); }, { signal });
+  }
 }

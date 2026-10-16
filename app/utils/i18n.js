@@ -7,6 +7,7 @@ const TRANSLATIONS = {
   vi: {
     title: "Lịch học UNETI",
     updated: "Cập nhật",
+    cachedDataWarning: "Lịch đã lưu quá 6 giờ. Nhấn Làm mới khi có kết nối mạng.",
     week: "Tuần",
     checkUpdate: "Cập nhật",
     login: "Đăng nhập",
@@ -132,6 +133,7 @@ const TRANSLATIONS = {
   en: {
     title: "UNETI Schedule",
     updated: "Updated",
+    cachedDataWarning: "Saved schedule is over 6 hours old. Refresh when connected.",
     week: "Week",
     checkUpdate: "Update",
     login: "Login",
