@@ -4,10 +4,19 @@ import {
   saveCookieHeaderToTxt,
   getCookiePartition,
   getJwtExpiration,
+  resumeCookiePersister,
+  isUnetiDomain,
+  suspendCookiePersister,
+  clearAllCookies,
 } from "./cookieManager.js";
-import { saveUser } from "./userStore.js";
+import { saveUser, clearUser } from "./userStore.js";
+import { captureSession, assertSession } from "./sessionState.js";
 import { CONFIG } from "../config.js";
 import { logger } from "../utils/logger.js";
+
+let activeLoginWindow = null;
+let activeLoginPromise = null;
+let activeReject = null;
 
 function sanitizeUrl(rawUrl) {
   try {
@@ -21,16 +30,52 @@ function sanitizeUrl(rawUrl) {
 function isTrustedUnetiUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl);
-    return parsed.hostname === "support.uneti.edu.vn" || parsed.hostname.endsWith(".uneti.edu.vn");
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return false;
+    const host = parsed.hostname.toLowerCase();
+    return host === "support.uneti.edu.vn" || host === CONFIG.UNETI_DOMAIN || host.endsWith("." + CONFIG.UNETI_DOMAIN);
   } catch {
     return false;
   }
 }
 
-export async function showLoginWindow(parent) {
-  return new Promise((resolve, reject) => {
+function studentIdOf(data) {
+  return data?.MaSinhVien || data?.studentId || data?.username || data?.user?.MaSinhVien || null;
+}
+
+export function cancelLoginWindow() {
+  if (activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+    try {
+      activeLoginWindow.close();
+      return;
+    } catch {}
+  }
+  if (activeReject) {
+    const rej = activeReject;
+    activeLoginWindow = null;
+    activeLoginPromise = null;
+    activeReject = null;
+    rej(new Error("Login cancelled"));
+  }
+}
+
+export function showLoginWindow(parent) {
+  if (activeLoginPromise && activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+    try {
+      activeLoginWindow.show();
+      activeLoginWindow.focus();
+    } catch {}
+    return activeLoginPromise;
+  }
+
+  const sessionSnapshot = captureSession();
+
+  activeLoginPromise = new Promise((resolve, reject) => {
+    activeReject = reject;
     let finished = false;
+    let capturing = false;
     let pollTimer = null;
+    let checkingAuth = false;
+    let pageReady = false;
 
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const { width: screenW, height: screenH, x: screenX, y: screenY } = display.workArea;
@@ -53,11 +98,22 @@ export async function showLoginWindow(parent) {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
+        sandbox: true,
         partition: getCookiePartition(),
       },
     });
 
-    win.loadURL(CONFIG.UNETI_LOGIN_URL);
+    activeLoginWindow = win;
+    win.webContents.setWindowOpenHandler?.(() => ({ action: "deny" }));
+    for (const eventName of ["will-navigate", "will-redirect"]) win.webContents.on(eventName, (event, url) => { if (!isTrustedUnetiUrl(url)) event.preventDefault(); });
+    suspendCookiePersister();
+    (async () => {
+      await win.webContents.session.clearStorageData?.();
+      assertSession(sessionSnapshot);
+      if (win.isDestroyed()) throw new Error("Login cancelled");
+      await win.loadURL(CONFIG.UNETI_LOGIN_URL);
+      pageReady = true;
+    })().catch(error => { cancelLoginWindow(); logger.warn("[loginWindow] load failed", { error: error.message }); });
     logger.debug(`[loginWindow] loading URL: ${CONFIG.UNETI_LOGIN_URL} at x:${posX}, y:${posY}`);
 
     const cleanup = () => {
@@ -68,23 +124,24 @@ export async function showLoginWindow(parent) {
     };
 
     async function handleSuccessfulLogin(source) {
-      if (finished) return;
+      if (finished || capturing) return;
+      capturing = true;
+      let transactionSnapshot = sessionSnapshot;
+      let cookiesPersisted = false;
 
       try {
         const ses = win.webContents.session;
         const allCookies = await ses.cookies.get({});
-        const cookies = allCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
-        const hasAccessToken = cookies.some((c) => c.name === "access_token");
+        const cookies = allCookies.filter((c) => isUnetiDomain(c.domain || CONFIG.UNETI_DOMAIN));
+        const hasAccessToken = cookies.some((c) => {
+          if (c.name !== "access_token" || !c.value) return false;
+          const exp = getJwtExpiration(c.value);
+          return exp !== null && exp > Date.now() / 1000;
+        });
 
         if (!cookies || cookies.length === 0 || !hasAccessToken) {
+          capturing = false;
           return;
-        }
-
-        finished = true;
-        cleanup();
-
-        if (win && !win.isDestroyed()) {
-          win.hide();
         }
 
         let userData = null;
@@ -109,12 +166,20 @@ export async function showLoginWindow(parent) {
           logger.warn(`[loginWindow] failed to read user data: ${e?.message}`);
         }
 
-        if (userData) {
-          await saveUser(userData);
-          const maskedId = userData.MaSinhVien ? `${String(userData.MaSinhVien).slice(0, 4)}****` : "unknown";
-          logger.info(`[loginWindow] saved student profile: ${maskedId}`);
+        const studentId = studentIdOf(userData);
+        if (!studentId) {
+          logger.debug("[loginWindow] waiting for student profile data");
+          capturing = false;
+          return;
         }
 
+        cleanup();
+
+        if (win && !win.isDestroyed()) {
+          win.hide();
+        }
+
+        assertSession(sessionSnapshot);
         for (const cookie of cookies) {
           const jwtExp = getJwtExpiration(cookie.value);
           if (jwtExp && jwtExp > Date.now() / 1000) {
@@ -126,20 +191,41 @@ export async function showLoginWindow(parent) {
                 value: cookie.value,
                 domain: cookie.domain,
                 path: cleanPath,
-                secure: !!cookie.secure,
+                secure: typeof cookie.secure === "boolean" ? cookie.secure : true,
                 httpOnly: !!cookie.httpOnly,
                 expirationDate: jwtExp,
-                url: `https://${cleanDomain}${cleanPath}`,
+                url: `https://${cleanDomain}${cleanPath.startsWith("/") ? cleanPath : "/" + cleanPath}`,
               });
             } catch {}
           }
         }
 
+        assertSession(sessionSnapshot);
+        if (win.isDestroyed()) throw new Error("Login cancelled");
+        const saved = await saveCookiesToSecureStorage(cookies);
+        cookiesPersisted = !!saved;
+        assertSession(sessionSnapshot);
+        if (!saved) throw new Error("Failed to persist cookies securely");
+        if (win.isDestroyed()) throw new Error("Login cancelled");
+        const savedSnapshot = await saveUser(userData);
+        transactionSnapshot = savedSnapshot;
+        assertSession(savedSnapshot);
+        if (win.isDestroyed()) throw new Error("Login cancelled");
+        logger.info("[loginWindow] saved student profile");
+
+        resumeCookiePersister();
         const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-        await saveCookiesToSecureStorage(cookies);
         await saveCookieHeaderToTxt(cookieHeader);
+        assertSession(savedSnapshot);
+        if (win.isDestroyed()) throw new Error("Login cancelled");
+
         const cleanSource = source.startsWith("http") ? sanitizeUrl(source) : source;
         logger.info(`[loginWindow] saved ${cookies.length} cookies from ${cleanSource}`);
+
+        finished = true;
+        activeLoginWindow = null;
+        activeLoginPromise = null;
+        activeReject = null;
 
         win.close();
         if (parent && !parent.isDestroyed()) {
@@ -149,8 +235,24 @@ export async function showLoginWindow(parent) {
         resolve(cookieHeader);
       } catch (err) {
         logger.error(`[loginWindow] login capture error: ${err?.message}`);
+        if (cookiesPersisted && (!activeLoginWindow || activeLoginWindow === win)) {
+          try {
+            assertSession(err.sessionSnapshot || transactionSnapshot);
+            await clearUser();
+            await clearAllCookies();
+          } catch { /* A newer session owns cleanup, or the main logout reports a persistence failure. */ }
+        }
+        capturing = false;
+        finished = true;
         cleanup();
-        win.close();
+        if (activeLoginWindow === win) {
+          activeLoginWindow = null;
+          activeLoginPromise = null;
+          activeReject = null;
+        }
+        if (win && !win.isDestroyed()) {
+          try { win.close(); } catch {}
+        }
         if (parent && !parent.isDestroyed()) {
           parent.show();
           parent.focus();
@@ -160,13 +262,13 @@ export async function showLoginWindow(parent) {
     }
 
     const checkAuthState = async () => {
-      if (finished || win.isDestroyed()) return;
+      if (!pageReady || finished || checkingAuth || win.isDestroyed() || win.webContents.isLoadingMainFrame?.()) return;
+      checkingAuth = true;
       try {
         const currentUrl = win.webContents.getURL();
         if (!isTrustedUnetiUrl(currentUrl)) return;
 
         const isNotOnLoginUrl = !currentUrl.includes("/dang-nhap");
-
         const hasAuthStore = await win.webContents.executeJavaScript(`
           (() => {
             try {
@@ -186,14 +288,14 @@ export async function showLoginWindow(parent) {
         if (isNotOnLoginUrl || hasAuthStore) {
           await handleSuccessfulLogin(currentUrl);
         }
-      } catch {}
+      } catch {} finally { checkingAuth = false; }
     };
 
     pollTimer = setInterval(checkAuthState, 600);
 
     const onNavigate = (_, url) => {
       logger.debug(`[loginWindow] navigated to: ${sanitizeUrl(url)}`);
-      if (isTrustedUnetiUrl(url) && !url.includes("/dang-nhap")) {
+      if (pageReady && isTrustedUnetiUrl(url) && !url.includes("/dang-nhap")) {
         handleSuccessfulLogin(url);
       }
     };
@@ -203,7 +305,14 @@ export async function showLoginWindow(parent) {
 
     win.on("closed", () => {
       cleanup();
-      if (!finished) {
+      const wasFinished = finished;
+      finished = true;
+      if (activeLoginWindow === win) {
+        activeLoginWindow = null;
+        activeLoginPromise = null;
+        activeReject = null;
+      }
+      if (!wasFinished) {
         logger.warn("[loginWindow] Window closed before login");
         if (parent && !parent.isDestroyed()) {
           parent.show();
@@ -213,4 +322,6 @@ export async function showLoginWindow(parent) {
       }
     });
   });
+
+  return activeLoginPromise;
 }

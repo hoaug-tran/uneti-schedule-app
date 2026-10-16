@@ -4,52 +4,104 @@ import { session } from "electron";
 import keytar from "keytar";
 import { getStoreDir } from "./storePath.js";
 import { CONFIG } from "../config.js";
-import { encryptJSON, decryptJSON, isEncrypted, encrypt, decrypt } from "../utils/encryption.js";
+import { encryptJSON, decryptJSON, isEncrypted, decrypt } from "../utils/encryption.js";
 import { logger } from "../utils/logger.js";
+import { captureSession, assertSession } from "./sessionState.js";
 
 let cookiePersistTimeout = null;
+let persisterSuspended = false;
+let cookieEpoch = 0;
+let cookieQueue = Promise.resolve();
+let persisterAttached = false;
+function queued(task) {
+  const next = cookieQueue.catch(() => {}).then(task);
+  cookieQueue = next;
+  return next;
+}
 
 export function getCookiePartition() {
   return "persist:uneti-session";
 }
 
-export async function saveCookiesToSecureStorage(cookies) {
-  if (!Array.isArray(cookies) || cookies.length === 0) {
-    return false;
+export function isUnetiDomain(domain) {
+  if (!domain || typeof domain !== "string") return false;
+  const d = domain.replace(/^\./, "").toLowerCase().trim();
+  return d === CONFIG.UNETI_DOMAIN || d.endsWith("." + CONFIG.UNETI_DOMAIN);
+}
+
+function getCookieUrl(cookie) {
+  const cleanDomain = (cookie.domain || CONFIG.UNETI_DOMAIN).replace(/^\./, "");
+  const cleanPath = cookie.path || "/";
+  return `https://${cleanDomain}${cleanPath.startsWith("/") ? cleanPath : "/" + cleanPath}`;
+}
+
+export function suspendCookiePersister() {
+  persisterSuspended = true;
+  if (cookiePersistTimeout) {
+    clearTimeout(cookiePersistTimeout);
+    cookiePersistTimeout = null;
   }
+}
+
+export function resumeCookiePersister() {
+  persisterSuspended = false;
+}
+
+async function removeLegacyFiles() {
+  const dir = getStoreDir();
+  await fs.rm(path.join(dir, "cookies.txt"), { force: true });
+  await fs.rm(path.join(dir, "cookies.txt.bak"), { force: true });
+}
+
+export function saveCookiesToSecureStorage(cookies) {
+  const epoch = cookieEpoch;
+  return queued(async () => {
+    if (epoch !== cookieEpoch) return false;
+    return persistCookies(cookies);
+  });
+}
+async function persistCookies(cookies) {
+  if (!Array.isArray(cookies) || cookies.length === 0) return false;
+  const filtered = cookies.filter((c) => isUnetiDomain(c.domain || CONFIG.UNETI_DOMAIN));
+  if (filtered.length === 0) return false;
+
+  const normalized = filtered.map(normalizeCookie);
+  let saved = false;
+  let usedVault = false;
   try {
-    const normalized = cookies.map(normalizeCookie);
     const json = JSON.stringify(normalized);
     await keytar.setPassword(
       CONFIG.COOKIE_KEYTAR_SERVICE,
       CONFIG.COOKIE_KEYTAR_ACCOUNT,
       json
     );
-    logger.debug(
-      `[cookieManager] saved ${normalized.length} cookies to secure storage`
-    );
-    return true;
+    logger.debug(`[cookieManager] saved ${normalized.length} cookies to secure storage`);
+    saved = true;
+    usedVault = true;
   } catch (err) {
-    logger.warn(
-      `[cookieManager] keytar save failed, fallback to JSON: ${err?.message}`
-    );
-    return await saveCookiesToJsonFile(cookies);
+    logger.warn(`[cookieManager] keytar save failed, fallback to JSON: ${err?.message}`);
+    saved = await saveCookiesToJsonFile(normalized);
   }
+
+  if (saved) {
+    await removeLegacyFiles();
+    if (usedVault) {
+      await fs.rm(path.join(getStoreDir(), "cookies.json"), { force: true });
+    }
+    await fs.rm(path.join(getStoreDir(), "cookies.json.bak"), { force: true });
+  }
+  return saved;
 }
 
 async function saveCookiesToJsonFile(cookies) {
-  if (!Array.isArray(cookies) || cookies.length === 0) {
-    return false;
-  }
+  if (!Array.isArray(cookies) || cookies.length === 0) return false;
   try {
     const dir = getStoreDir();
     await fs.mkdir(dir, { recursive: true });
     const jsonPath = path.join(dir, "cookies.json");
-
     const normalized = cookies.map(normalizeCookie);
     const encrypted = encryptJSON(normalized);
     await fs.writeFile(jsonPath, encrypted, "utf8");
-
     logger.info(`Saved ${normalized.length} encrypted cookies to JSON file`);
     return true;
   } catch (err) {
@@ -58,22 +110,11 @@ async function saveCookiesToJsonFile(cookies) {
   }
 }
 
-export async function saveCookieHeaderToTxt(cookieHeader) {
-  if (!cookieHeader || !cookieHeader.trim()) {
-    return false;
-  }
+export async function saveCookieHeaderToTxt(_cookieHeader) {
   try {
-    const dir = getStoreDir();
-    await fs.mkdir(dir, { recursive: true });
-    const txtPath = path.join(dir, "cookies.txt");
-    const encrypted = encrypt(cookieHeader);
-    await fs.writeFile(txtPath, encrypted, "utf8");
-    logger.debug("[cookieManager] saved encrypted cookie header to txt");
-    return true;
-  } catch (err) {
-    logger.error(`[cookieManager] txt save failed: ${err?.message}`);
-    return false;
-  }
+    await removeLegacyFiles();
+  } catch {}
+  return true;
 }
 
 export async function loadCookiesFromSecureStorage() {
@@ -84,10 +125,10 @@ export async function loadCookiesFromSecureStorage() {
     );
     if (json) {
       const cookies = JSON.parse(json);
-      logger.debug(
-        `[cookieManager] loaded ${cookies.length} cookies from secure storage`
-      );
-      return cookies;
+      if (Array.isArray(cookies)) {
+        logger.debug(`[cookieManager] loaded ${cookies.length} cookies from secure storage`);
+        return cookies;
+      }
     }
   } catch (err) {
     logger.warn(`[cookieManager] keytar load failed: ${err?.message}`);
@@ -100,19 +141,19 @@ async function loadCookiesFromJsonFile() {
     const dir = getStoreDir();
     const jsonPath = path.join(dir, "cookies.json");
     const data = await fs.readFile(jsonPath, "utf8");
-
-    let cookies;
-    if (isEncrypted(data)) {
-      cookies = decryptJSON(data);
-      logger.info(`Loaded ${cookies.length} encrypted cookies from JSON file`);
-    } else {
-      cookies = JSON.parse(data);
-      logger.warn(`Loaded ${cookies.length} plaintext cookies (migrating to encrypted)`);
-
-      await saveCookiesToJsonFile(cookies);
+    if (!isEncrypted(data)) {
+      logger.warn("[cookieManager] rejected unencrypted basic_text cookies in JSON file");
+      return null;
     }
-
-    return cookies;
+    const cookies = decryptJSON(data);
+    if (Array.isArray(cookies)) {
+      logger.info(`Loaded ${cookies.length} encrypted cookies from JSON file`);
+      if (!data.startsWith("v1:")) {
+        if (!await saveCookiesToSecureStorage(cookies)) return null;
+      }
+      return cookies;
+    }
+    return null;
   } catch (err) {
     if (err?.code !== "ENOENT") {
       logger.warn("JSON cookie load failed", { error: err.message });
@@ -128,11 +169,14 @@ export async function loadCookieHeaderFromTxt() {
     const data = await fs.readFile(txtPath, "utf8");
     const h = data.replace(/\r?\n/g, "").trim();
     if (!h) return null;
-    try {
-      return decrypt(h);
-    } catch {
-      return h;
+    if (isEncrypted(h)) {
+      try {
+        return decrypt(h);
+      } catch {
+        return null;
+      }
     }
+    return null;
   } catch {
     return null;
   }
@@ -144,7 +188,7 @@ export function getJwtExpiration(tokenValue) {
     const parts = tokenValue.split(".");
     if (parts.length !== 3) return null;
     const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
-    if (typeof payload.exp === "number") {
+    if (typeof payload.exp === "number" && Number.isFinite(payload.exp)) {
       return payload.exp;
     }
   } catch {
@@ -167,26 +211,39 @@ export function normalizeCookie(cookie) {
 }
 
 function validateCookie(cookie) {
-  if (!cookie.name || !cookie.value) return false;
+  if (!cookie || !cookie.name || !cookie.value) return false;
+  if (!isUnetiDomain(cookie.domain || CONFIG.UNETI_DOMAIN)) return false;
+
+  const nowSec = Date.now() / 1000;
   const jwtExp = getJwtExpiration(cookie.value);
-  if (jwtExp) {
-    return jwtExp > Date.now() / 1000;
+  if (jwtExp !== null && jwtExp <= nowSec) return false;
+
+  if (cookie.name === "access_token") {
+    if (jwtExp === null || jwtExp <= nowSec) return false;
   }
-  if (cookie.expirationDate && cookie.expirationDate < Date.now() / 1000) {
+
+  if (typeof cookie.expirationDate === "number" && cookie.expirationDate <= nowSec) {
     return false;
   }
   return true;
 }
 
+function hasValidAccessToken(cookies) {
+  return Array.isArray(cookies) && cookies.some((c) => c.name === "access_token" && validateCookie(c));
+}
+
 export async function bootstrapCookiesToSession() {
+  const snapshot = captureSession();
+  resumeCookiePersister();
   const partition = getCookiePartition();
   const ses = session.fromPartition(partition);
 
   const allExisting = await ses.cookies.get({});
-  const existing = allExisting.filter(c => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+  assertSession(snapshot);
+  const existing = allExisting.filter((c) => isUnetiDomain(c.domain));
   const validExisting = existing.filter(validateCookie);
-  const hasAccessToken = validExisting.some(c => c.name === "access_token");
-  if (validExisting.length > 0 && hasAccessToken) {
+  if (validExisting.length > 0 && hasValidAccessToken(validExisting)) {
+    await saveCookiesToSecureStorage(validExisting);
     logger.debug("[cookieManager] session already has cookies");
     return;
   }
@@ -202,27 +259,25 @@ export async function bootstrapCookiesToSession() {
   }
 
   const normalizedCookies = cookies.map(normalizeCookie);
+  assertSession(snapshot);
   const validCookies = normalizedCookies.filter(validateCookie);
 
   for (const cookie of validCookies) {
+    assertSession(snapshot);
     try {
-      const cleanDomain = (cookie.domain || CONFIG.UNETI_DOMAIN).replace(/^\./, "");
-      const cleanPath = cookie.path || "/";
       await ses.cookies.set({
         name: cookie.name,
         value: cookie.value,
         domain: cookie.domain,
-        path: cleanPath,
-        secure: !!cookie.secure,
+        path: cookie.path || "/",
+        secure: typeof cookie.secure === "boolean" ? cookie.secure : true,
         httpOnly: !!cookie.httpOnly,
         expirationDate: cookie.expirationDate,
         sameSite: mapSameSite(cookie.sameSite),
-        url: `https://${cleanDomain}${cleanPath}`,
+        url: getCookieUrl(cookie),
       });
     } catch (err) {
-      logger.warn(
-        `[cookieManager] failed to set cookie ${cookie.name}: ${err?.message}`
-      );
+      logger.warn(`[cookieManager] failed to set cookie ${cookie.name}: ${err?.message}`);
     }
   }
 
@@ -232,6 +287,7 @@ export async function bootstrapCookiesToSession() {
     logger.warn(`[cookieManager] flush storage failed: ${err?.message}`);
   }
 
+  if (hasValidAccessToken(validCookies)) await saveCookiesToSecureStorage(validCookies);
   logger.info(`[cookieManager] bootstrapped ${validCookies.length} cookies`);
 }
 
@@ -240,27 +296,33 @@ function mapSameSite(value) {
   const s = String(value).toLowerCase();
   if (s.includes("lax")) return "lax";
   if (s.includes("strict")) return "strict";
-  if (s.includes("none") || s.includes("no_restriction"))
-    return "no_restriction";
+  if (s.includes("none") || s.includes("no_restriction")) return "no_restriction";
   return "unspecified";
 }
 
 export function attachCookieAutoPersist() {
+  if (persisterAttached) return;
+  persisterAttached = true;
   const partition = getCookiePartition();
   const ses = session.fromPartition(partition);
 
   ses.cookies.on("changed", (_evt, cookie) => {
-    if (!cookie?.domain?.includes(CONFIG.UNETI_DOMAIN)) return;
+    if (persisterSuspended) return;
+    if (!cookie?.domain || !isUnetiDomain(cookie.domain)) return;
 
     clearTimeout(cookiePersistTimeout);
     cookiePersistTimeout = setTimeout(async () => {
+      if (persisterSuspended) return;
+      const snapshot = captureSession();
       try {
         const all = await ses.cookies.get({});
-        const filtered = all.filter(c => c.domain?.includes(CONFIG.UNETI_DOMAIN));
-        await saveCookiesToSecureStorage(filtered);
-        const header = filtered.map((c) => `${c.name}=${c.value}`).join("; ");
-        await saveCookieHeaderToTxt(header);
-        logger.debug(`[cookieManager] auto-persisted ${filtered.length} cookies`);
+        assertSession(snapshot);
+        const filtered = all.filter((c) => isUnetiDomain(c.domain));
+        if (persisterSuspended) return;
+        if (filtered.length > 0) {
+          await saveCookiesToSecureStorage(filtered);
+          logger.debug(`[cookieManager] auto-persisted ${filtered.length} cookies`);
+        }
       } catch (err) {
         logger.warn(`[cookieManager] auto-persist failed: ${err?.message}`);
       }
@@ -273,17 +335,16 @@ export async function hasCookies() {
     const partition = getCookiePartition();
     const ses = session.fromPartition(partition);
     const sesCookies = await ses.cookies.get({});
-    const filteredSes = sesCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
-    if (filteredSes.length > 0) return true;
+    const filteredSes = sesCookies.filter((c) => isUnetiDomain(c.domain));
+    if (filteredSes.length > 0 && hasValidAccessToken(filteredSes.filter(validateCookie))) {
+      return true;
+    }
 
     const secure = await loadCookiesFromSecureStorage();
-    if (Array.isArray(secure) && secure.length > 0) return true;
+    if (Array.isArray(secure) && hasValidAccessToken(secure.filter(validateCookie))) return true;
 
     const json = await loadCookiesFromJsonFile();
-    if (Array.isArray(json) && json.length > 0) return true;
-
-    const txt = await loadCookieHeaderFromTxt();
-    if (txt && txt.trim().length > 0) return true;
+    if (Array.isArray(json) && hasValidAccessToken(json.filter(validateCookie))) return true;
 
     return false;
   } catch {
@@ -296,9 +357,9 @@ export async function areCookiesValid() {
     const partition = getCookiePartition();
     const ses = session.fromPartition(partition);
     const sesCookies = await ses.cookies.get({});
-    const filteredSes = sesCookies.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+    const filteredSes = sesCookies.filter((c) => isUnetiDomain(c.domain));
     const validSes = filteredSes.filter(validateCookie);
-    if (validSes.length > 0) {
+    if (validSes.length > 0 && hasValidAccessToken(validSes)) {
       return true;
     }
 
@@ -306,13 +367,10 @@ export async function areCookiesValid() {
     if (!cookies || !Array.isArray(cookies) || cookies.length === 0) {
       cookies = await loadCookiesFromJsonFile();
     }
-
-    if (!cookies || !Array.isArray(cookies)) {
-      return false;
-    }
+    if (!cookies || !Array.isArray(cookies)) return false;
 
     const validCookies = cookies.filter(validateCookie);
-    return validCookies.length > 0;
+    return validCookies.length > 0 && hasValidAccessToken(validCookies);
   } catch {
     return false;
   }
@@ -323,17 +381,11 @@ export async function buildCookieHeader() {
     const partition = getCookiePartition();
     const ses = session.fromPartition(partition);
     const all = await ses.cookies.get({});
-    const cookies = all.filter((c) => c.domain?.includes(CONFIG.UNETI_DOMAIN));
+    const cookies = all.filter((c) => isUnetiDomain(c.domain));
     const validCookies = cookies.filter(validateCookie);
-    const hasAccessToken = validCookies.some((c) => c.name === "access_token");
-    if (validCookies.length > 0 && hasAccessToken) {
+    if (validCookies.length > 0 && hasValidAccessToken(validCookies)) {
       return validCookies.map((c) => `${c.name}=${c.value}`).join("; ");
     }
-  } catch {}
-
-  try {
-    const txt = await loadCookieHeaderFromTxt();
-    if (txt && txt.includes("access_token")) return txt;
   } catch {}
 
   let stored = await loadCookiesFromSecureStorage();
@@ -342,8 +394,7 @@ export async function buildCookieHeader() {
   }
   if (Array.isArray(stored) && stored.length > 0) {
     const valid = stored.map(normalizeCookie).filter(validateCookie);
-    const hasAccessToken = valid.some((c) => c.name === "access_token");
-    if (valid.length > 0 && hasAccessToken) {
+    if (valid.length > 0 && hasValidAccessToken(valid)) {
       return valid.map((c) => `${c.name}=${c.value}`).join("; ");
     }
   }
@@ -351,39 +402,22 @@ export async function buildCookieHeader() {
   return "";
 }
 
-export async function clearAllCookies() {
-  try {
-    const partition = getCookiePartition();
-    const ses = session.fromPartition(partition);
-    const cookies = await ses.cookies.get({});
-
-    for (const cookie of cookies) {
-      try {
-        await ses.cookies.remove(`https://${cookie.domain}`, cookie.name);
-      } catch { }
+export function clearAllCookies() {
+  suspendCookiePersister();
+  cookieEpoch++;
+  return queued(async () => {
+    const ses = session.fromPartition(getCookiePartition());
+    const errors = [];
+    async function attempt(task) { try { await task(); } catch (error) { errors.push(error); } }
+    await attempt(() => ses.clearStorageData());
+    await attempt(() => ses.clearCache());
+    await attempt(() => ses.flushStorageData());
+    for (const file of ["cookies.json", "cookies.json.bak", "cookies.txt", "cookies.txt.bak"]) {
+      await attempt(() => fs.rm(path.join(getStoreDir(), file), { force: true }));
     }
-
-    await ses.flushStorageData();
-
-    const dir = getStoreDir();
-    try {
-      await fs.rm(path.join(dir, "cookies.json"), { force: true });
-    } catch { }
-    try {
-      await fs.rm(path.join(dir, "cookies.txt"), { force: true });
-    } catch { }
-
-    try {
-      await keytar.deletePassword(
-        CONFIG.COOKIE_KEYTAR_SERVICE,
-        CONFIG.COOKIE_KEYTAR_ACCOUNT
-      );
-    } catch { }
-
-    logger.info("[cookieManager] cleared all cookies");
+    await attempt(() => keytar.deletePassword(CONFIG.COOKIE_KEYTAR_SERVICE, CONFIG.COOKIE_KEYTAR_ACCOUNT));
+    if (errors.length) throw new AggregateError(errors, "Cookie storage could not be fully erased");
+    logger.info("[cookieManager] cleared all cookies, storage and backups");
     return true;
-  } catch (err) {
-    logger.error(`[cookieManager] clear failed: ${err?.message}`);
-    return false;
-  }
+  });
 }
