@@ -8,7 +8,7 @@ import {
   BrowserWindow,
   Tray,
   nativeImage,
-  ipcMain,
+  ipcMain as rawIpcMain,
   Menu,
   screen,
   powerMonitor,
@@ -37,11 +37,11 @@ import {
   stopCookieRefreshService,
 } from "../app/fetcher/cookieRefresh.js";
 import { closeDatabase, loadScheduleAsync } from "../app/fetcher/scheduleDb.js";
-import { isAuthError } from "../app/fetcher/sessionState.js";
+import { isAuthError, invalidateSession, captureSession, assertSession } from "../app/fetcher/sessionState.js";
 import { getAcademicResults } from "../app/fetcher/getAcademicResults.js";
 import { loadAcademicResults } from "../app/fetcher/academicDb.js";
-import { planGpa, simulateGpa, solveCustomGpaPlan } from "../app/utils/gpa.js";
-import { weekKey } from "../app/utils/date.js";
+import { runGpa, closeGpaWorker } from "./gpaService.js";
+import { weekKey, vietnamNow } from "../app/utils/date.js";
 import { i18nInstance as i18n } from "../app/utils/i18n.js";
 import {
   startClassReminderService,
@@ -51,9 +51,31 @@ import {
 import { logger } from "../app/utils/logger.js";
 import { store } from "../app/utils/store.js";
 
-const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+import { isTrustedSender, validateIpc, externalUrl, clampWindow } from "./security.js";
+import { createUpdateScheduler } from "./updateScheduler.js";
+import { flushJsonWrites } from "../app/fetcher/jsonStore.js";
+const isDev = !app.isPackaged;
+const ipcMain = {
+  handle(channel, handler) {
+    rawIpcMain.handle(channel, (event, ...args) => {
+      if (!isTrustedSender(event, win, path.join(__dirname, "../app/index.html"))) throw new Error("Untrusted IPC sender");
+      validateIpc(channel, args);
+      const snapshot = captureSession();
+      return Promise.resolve(handler(event, ...args)).then(result => {
+        if (/^(gpa:|academic:|schedule:load-file)/.test(channel)) assertSession(snapshot);
+        return result;
+      });
+    });
+  },
+  on(channel, handler) {
+    rawIpcMain.on(channel, (event, ...args) => {
+      if (!isTrustedSender(event, win, path.join(__dirname, "../app/index.html"))) return;
+      handler(event, ...args);
+    });
+  },
+};
 
-if (process.env.USE_LOCAL_UPDATE_SERVER === "true") {
+if (isDev && process.env.USE_LOCAL_UPDATE_SERVER === "true") {
   const serverUrl = process.env.LOCAL_UPDATE_SERVER_URL || "http://localhost:8080";
   autoUpdater.setFeedURL({
     provider: "generic",
@@ -77,7 +99,7 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-app.setAppUserModelId("com.uneti.schedulewidget");
+app.setAppUserModelId("com.hoaug.uneti.schedule");
 
 let tray, win;
 let loginRequiredInFlight = false;
@@ -85,6 +107,7 @@ let loginRequiredInFlight = false;
 async function requireLogin(reason = "Session expired") {
   if (loginRequiredInFlight) return;
   loginRequiredInFlight = true;
+  invalidateSession();
   try {
     logger.warn(`[auth] require login: ${reason}`);
     stopCookieRefreshService();
@@ -192,7 +215,8 @@ ipcMain.handle("schedule:load-file", async (_, isoDate) => {
     return {
       weekStart: schedule.week_start,
       data: schedule.data || [],
-      updatedAt: schedule.updated_at
+      updatedAt: schedule.updated_at,
+      stale: !!schedule.stale
     };
   } catch (err) {
     logger.error(`[schedule:load-file] error: ${err}`);
@@ -201,6 +225,8 @@ ipcMain.handle("schedule:load-file", async (_, isoDate) => {
 });
 
 ipcMain.on("logger:log", (_, level, message, context) => {
+  if (!["debug", "info", "warn", "error"].includes(level) || typeof message !== "string" || message.length > 4000) return;
+  try { if (context && JSON.stringify(context).length > 16000) return; } catch { return; }
   if (logger[level]) {
     logger[level](`[renderer] ${message}`, context);
   } else {
@@ -226,7 +252,7 @@ ipcMain.handle("gpa:plan", async (_, target) => {
   try {
     const data = await loadAcademicResults();
     if (!data?.subjects?.length) return { ok: false, error: "No academic results" };
-    return { ok: true, data: planGpa(data.subjects, target) };
+    return { ok: true, data: await runGpa("plan", data.subjects, target) };
   } catch (err) {
     logger.warn(`[gpa:plan] fail: ${err?.message}`);
     return { ok: false, error: err?.message || String(err) };
@@ -238,7 +264,7 @@ ipcMain.handle("gpa:simulate", async (_, overrides) => {
     const data = await loadAcademicResults();
     if (!data?.subjects?.length) return { ok: false, error: "No academic results" };
     if (!overrides || Array.isArray(overrides) || typeof overrides !== "object") return { ok: false, error: "Invalid GPA overrides" };
-    return { ok: true, data: simulateGpa(data.subjects, overrides) };
+    return { ok: true, data: await runGpa("simulate", data.subjects, overrides) };
   } catch (err) {
     logger.warn(`[gpa:simulate] fail: ${err?.message}`);
     return { ok: false, error: err?.message || String(err) };
@@ -249,7 +275,7 @@ ipcMain.handle("gpa:custom-plan", async (_, target, selectedKeys, targetGradeOve
   try {
     const data = await loadAcademicResults();
     if (!data?.subjects?.length) return { ok: false, error: "No academic results" };
-    return { ok: true, data: solveCustomGpaPlan(data.subjects, target, selectedKeys, targetGradeOverrides) };
+    return { ok: true, data: await runGpa("custom", data.subjects, target, selectedKeys, targetGradeOverrides) };
   } catch (err) {
     logger.warn(`[gpa:custom-plan] fail: ${err?.message}`);
     return { ok: false, error: err?.message || String(err) };
@@ -266,7 +292,7 @@ ipcMain.handle("widget:refresh", async () => {
     if (!cookiesValid) {
       logger.warn("[widget:refresh] Cookies expired or missing, triggering login");
       win?.webContents.send("login-required");
-      return;
+      return { ok: false, auth: true };
     }
 
     logger.info("[widget:refresh] Cookies valid, refreshing schedule");
@@ -275,10 +301,11 @@ ipcMain.handle("widget:refresh", async () => {
     const res1 = await getSchedule(1);
     if (res0?.authError || res1?.authError) {
       await requireLogin("Refresh detected expired session");
-      return;
+      return { ok: false, auth: true };
     }
 
     win?.webContents.send("reload");
+    return { ok: !res0?.stale && !res1?.stale, stale: !!(res0?.stale || res1?.stale) };
   } catch (err) {
     logger.warn(`[widget:refresh] fail: ${err?.message}`);
     if (isAuthError(err)) {
@@ -286,6 +313,7 @@ ipcMain.handle("widget:refresh", async () => {
     } else {
       win?.webContents.send("reload");
     }
+    return { ok: false, auth: isAuthError(err), error: "Schedule refresh failed" };
   }
 });
 
@@ -316,10 +344,17 @@ ipcMain.handle("widget:quit", () => {
   app.quit();
 });
 
-ipcMain.handle("widget:login", async () => {
+let loginFlowPromise = null;
+ipcMain.handle("widget:login", () => {
+  if (!loginFlowPromise) loginFlowPromise = completeLogin().finally(() => { loginFlowPromise = null; });
+  return loginFlowPromise;
+});
+async function completeLogin() {
   try {
     logger.debug("[IPC] widget:login START");
+    if (logoutPromise) await logoutPromise;
     await showLoginWindow(win);
+    const snapshot = captureSession();
     logger.debug("[IPC] widget:login window closed, cookies saved");
     startCookieRefreshService(() => requireLogin("Session expired in background refresh"));
 
@@ -338,13 +373,14 @@ ipcMain.handle("widget:login", async () => {
       );
     }
 
+    assertSession(snapshot);
     logger.debug("[IPC] widget:login sending status ready and login-success");
     win?.webContents.send("status", "Schedule ready");
     win?.webContents.send("login-success");
 
     startClassReminderService({
       getTodaySchedule: async () => {
-        const d = new Date();
+        const d = vietnamNow();
         const key = weekKey(d);
         const schedule = await loadScheduleAsync(key);
         return schedule?.data || [];
@@ -363,39 +399,45 @@ ipcMain.handle("widget:login", async () => {
   } catch (err) {
     logger.error(`[IPC] widget:login error: ${err?.message}`);
     win?.webContents.send("status", "Login failed.");
+    throw new Error("Login failed or cancelled");
   }
-});
+}
 
-ipcMain.handle("widget:logout", async () => {
-  try {
-    logger.info("[IPC] widget:logout START");
-    stopCookieRefreshService();
-    stopClassReminderService();
+let logoutPromise = null;
+async function logoutAndErase() {
+  if (logoutPromise) return logoutPromise;
+  invalidateSession();
+  stopCookieRefreshService();
+  stopClassReminderService();
+  logoutPromise = (async () => {
+    const { cancelLoginWindow } = await import("../app/fetcher/loginWindow.js");
+    cancelLoginWindow?.();
     const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
     const { clearUser } = await import("../app/fetcher/userStore.js");
     const { clearAcademicResults } = await import("../app/fetcher/academicDb.js");
-    await clearAllCookies();
-    await clearAllSchedules();
-    await clearUser();
-    await clearAcademicResults();
-    logger.info("[IPC] User logged out successfully");
+    const results = await Promise.allSettled([clearAllCookies(), clearAllSchedules(), clearUser(), clearAcademicResults()]);
+    for (const file of ["schedule.json", "schedule.json.bak", "fragment.html", "user.json.bak", "academic-results.json.bak", "schedules.json.bak"]) {
+      try { await fs.rm(path.join(getStoreDir(), file), { force: true }); }
+      catch (error) { results.push({ status: "rejected", reason: error }); }
+    }
     win?.webContents.send("login-required");
     win?.webContents.send("reload");
+    if (results.some(result => result.status === "rejected")) throw new Error("User data could not be fully erased");
     return { success: true };
-  } catch (err) {
-    logger.error(`[IPC] widget:logout error: ${err?.message}`);
-    return { success: false, error: err?.message };
-  }
-});
+  })().finally(() => { logoutPromise = null; });
+  return logoutPromise;
+}
+ipcMain.handle("widget:logout", () => logoutAndErase());
 
 let inFlightUpdateCheck = null;
+let updateCancellation = null;
 
 async function checkForUpdatesSafe() {
   if (inFlightUpdateCheck) {
     return inFlightUpdateCheck;
   }
 
-  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+  const isDev = !app.isPackaged;
 
   if (isDev) {
     const mockState = process.env.MOCK_UPDATE;
@@ -434,9 +476,10 @@ async function checkForUpdatesSafe() {
         return { error: "Request timed out" };
       }
       if (
-        result?.updateInfo?.version &&
-        result.updateInfo.version !== app.getVersion()
+        result?.isUpdateAvailable === true &&
+        result?.updateInfo?.version
       ) {
+        updateCancellation = result.cancellationToken;
         logger.info(`[autoUpdater] Update available: ${result.updateInfo.version}`);
         return { update: true, version: result.updateInfo.version };
       }
@@ -458,7 +501,7 @@ ipcMain.handle("app:check-update", async () => {
 });
 
 ipcMain.handle("app:install-update", async () => {
-  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+  const isDev = !app.isPackaged;
 
   if (isDev && process.env.MOCK_UPDATE === 'available') {
     logger.debug("[mock] Simulating download with progress");
@@ -481,7 +524,7 @@ ipcMain.handle("app:install-update", async () => {
     downloading = true;
     lastTransferred = 0;
     resetStallWatch();
-    await autoUpdater.downloadUpdate();
+    await autoUpdater.downloadUpdate(updateCancellation || undefined);
     return true;
   } catch (e) {
     logger.error(`install update error: ${e?.message}`);
@@ -492,7 +535,7 @@ ipcMain.handle("app:install-update", async () => {
 });
 
 ipcMain.handle("app:confirm-install", async () => {
-  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+  const isDev = !app.isPackaged;
 
   if (isDev && process.env.MOCK_UPDATE === 'available') {
     logger.debug("[mock] Simulating app restart for update install");
@@ -507,7 +550,9 @@ ipcMain.handle("app:confirm-install", async () => {
   try {
     logger.info("[autoUpdater] Installing update - preparing to quit");
 
-    stopCookieRefreshService();
+    await prepareShutdown();
+    shutdownComplete = true;
+    app.isQuitting = true;
 
     BrowserWindow.getAllWindows().forEach(w => {
       try {
@@ -519,6 +564,7 @@ ipcMain.handle("app:confirm-install", async () => {
 
     app.removeAllListeners("window-all-closed");
     logger.info("[autoUpdater] Calling quitAndInstall (silent mode)");
+    app.isQuitting = true;
     autoUpdater.quitAndInstall(true, true);
 
     return true;
@@ -531,11 +577,8 @@ ipcMain.handle("app:confirm-install", async () => {
 ipcMain.handle("app:get-version", () => app.getVersion());
 
 ipcMain.handle("app:open-external", async (_, url) => {
-  if (typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"))) {
-    await shell.openExternal(url);
-    return true;
-  }
-  return false;
+  await shell.openExternal(externalUrl(url));
+  return true;
 });
 
 ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
@@ -567,10 +610,8 @@ ipcMain.handle("widget:fetch-week", async (_, offset, baseIso) => {
 ipcMain.handle("window:resize-height", (_, height) => {
   if (win && !win.isDestroyed()) {
     const bounds = win.getBounds();
-    const newHeight = Math.max(
-      CONFIG.WINDOW_MIN_HEIGHT,
-      Math.min(CONFIG.WINDOW_MAX_HEIGHT, Math.round(height))
-    );
+    const workArea = screen.getDisplayMatching(bounds).workArea;
+    const newHeight = Math.min(workArea.height, Math.max(Math.min(CONFIG.WINDOW_MIN_HEIGHT, workArea.height), Math.min(CONFIG.WINDOW_MAX_HEIGHT, Math.round(height))));
     win.setBounds({ ...bounds, height: newHeight });
     return { ok: true, height: newHeight };
   }
@@ -590,6 +631,7 @@ function resetStallWatch() {
         isDownloadFailure: true,
         githubUrl: "https://github.com/hoaug-tran/uneti-schedule-app/releases/latest",
       });
+      updateCancellation?.cancel();
       downloading = false;
       lastTransferred = 0;
     }
@@ -670,16 +712,17 @@ function createWindow() {
   if (win && !win.isDestroyed()) return win;
 
   const primary = screen.getPrimaryDisplay();
+  const initialSize = clampWindow(primary.workArea, CONFIG.WINDOW_DEFAULT_WIDTH, CONFIG.WINDOW_DEFAULT_HEIGHT);
   const { x: workX, y: workY, width: workW, height: workH } = primary.workArea;
   const initialX = Math.round(workX + (workW - CONFIG.WINDOW_DEFAULT_WIDTH) / 2);
   const initialY = Math.round(workY + (workH - CONFIG.WINDOW_DEFAULT_HEIGHT) / 2);
 
   win = new BrowserWindow({
-    width: CONFIG.WINDOW_DEFAULT_WIDTH,
-    height: CONFIG.WINDOW_DEFAULT_HEIGHT,
+    width: initialSize.width,
+    height: initialSize.height,
     maxWidth: CONFIG.WINDOW_DEFAULT_WIDTH,
     maxHeight: CONFIG.WINDOW_MAX_HEIGHT,
-    minHeight: CONFIG.WINDOW_MIN_HEIGHT,
+    minHeight: Math.min(CONFIG.WINDOW_MIN_HEIGHT, initialSize.height),
     x: initialX,
     y: initialY,
     show: true,
@@ -697,9 +740,11 @@ function createWindow() {
     },
   });
 
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", event => event.preventDefault());
   win.loadFile(path.join(__dirname, "../app/index.html"));
 
-  const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+  const isDev = !app.isPackaged;
   if (!isDev) {
     win.webContents.on('before-input-event', (event, input) => {
       if (input.key === 'F12') {
@@ -815,9 +860,7 @@ async function updateTrayContextMenu() {
       label: i18n.t("trayClearUserData"),
       click: async () => {
         try {
-          const { clearAllCookies } = await import("../app/fetcher/cookieManager.js");
-          await clearAllCookies();
-          await clearAllSchedules();
+          await logoutAndErase();
           logger.info("[Tray] User data cleared by user");
           win?.webContents.send("reload");
         } catch (err) {
@@ -874,7 +917,7 @@ async function updateTrayContextMenu() {
       click: (menuItem) => {
         store.set("autoUpdate", menuItem.checked);
         logger.info(`[Tray] Auto-update ${menuItem.checked ? 'enabled' : 'disabled'}`);
-        createTray();
+        updateTrayContextMenu();
       },
     },
     { type: "separator" },
@@ -890,7 +933,7 @@ async function updateTrayContextMenu() {
 }
 
 ipcMain.on("i18n:set-lang", (_evt, lang) => {
-  if (lang) {
+  if (["vi", "en"].includes(lang)) {
     i18n.setLanguage(lang);
     updateTrayContextMenu();
   }
@@ -901,8 +944,7 @@ function showWindow() {
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
   const bounds = win.getBounds();
-  const width = bounds.width;
-  const height = bounds.height;
+  const { width, height } = clampWindow(display.workArea, bounds.width, bounds.height);
   const margin = CONFIG.TRAY_SHOW_POSITION_MARGIN;
 
   let x = Math.min(
@@ -910,7 +952,7 @@ function showWindow() {
     display.workArea.x + display.workArea.width - width
   );
 
-  let y = display.workArea.y + display.workArea.height - height - margin;
+  let y = Math.max(display.workArea.y, display.workArea.y + display.workArea.height - height - margin);
 
   win.setBounds({ x, y, width, height });
   win.show();
@@ -929,6 +971,7 @@ app.whenReady().then(async () => {
   }
   await createTray();
   createWindow();
+  startBackgroundServices();
   await bootstrapCookiesToSession();
   attachCookieAutoPersist();
   const hasCookie = await hasCookies();
@@ -937,7 +980,7 @@ app.whenReady().then(async () => {
     startCookieRefreshService(() => requireLogin("Session expired in background refresh"));
     startClassReminderService({
       getTodaySchedule: async () => {
-        const d = new Date();
+        const d = vietnamNow();
         const key = weekKey(d);
         const schedule = await loadScheduleAsync(key);
         return schedule?.data || [];
@@ -955,7 +998,6 @@ app.whenReady().then(async () => {
       if (result0?.authError || result1?.authError) {
         logger.warn("[main] Auth error detected on startup, requiring re-login");
         await requireLogin("Startup session expired");
-        return;
       }
 
       if (result0?.staleWarning || result1?.staleWarning) {
@@ -963,7 +1005,6 @@ app.whenReady().then(async () => {
         logger.warn(`[main] Stale data detected - requiring re-login: ${i18nKey}`);
         await requireLogin(i18nKey);
         win?.webContents.send("toast-stale-logout", i18nKey);
-        return;
       }
 
       logger.info("[main] fetched schedule in background");
@@ -984,54 +1025,17 @@ app.whenReady().then(async () => {
     win?.webContents.send("login-required");
   }
 
-  const autoUpdateEnabled = store.get("autoUpdate", true);
-  if (autoUpdateEnabled && !isDev) {
-    setTimeout(async () => {
-      try {
-        logger.info("[autoUpdater] Checking for updates on startup");
-        const result = await checkForUpdatesSafe();
-        if (result?.update && result?.version) {
-          logger.info(`[autoUpdater] Update available on startup: v${result.version}`);
-          win?.webContents.send(
-            "toast-update",
-            `New update available (v${result.version}). Click to update.`
-          );
-        } else {
-          logger.info("[autoUpdater] No update available on startup");
-        }
-      } catch (err) {
-        logger.warn(`[autoUpdater] initial check failed: ${err?.message}`);
-      }
-    }, 15000);
-
-    setInterval(async () => {
-      const isStillEnabled = store.get("autoUpdate", true);
-      if (isStillEnabled) {
-        try {
-          logger.info("[autoUpdater] Periodic update check (6h interval)");
-          const result = await checkForUpdatesSafe();
-          if (result?.update && result?.version) {
-            logger.info(`[autoUpdater] Update available (periodic): v${result.version}`);
-          } else {
-            logger.info("[autoUpdater] No update available (periodic)");
-          }
-        } catch (err) {
-          logger.warn(`[autoUpdater] periodic check failed: ${err?.message}`);
-        }
-      }
-    }, 6 * 60 * 60 * 1000);
-  }
 
   function inActiveHours() {
-    const h = new Date().getHours();
+    const h = vietnamNow().getHours();
     return h >= CONFIG.ACTIVE_HOURS_START && h <= CONFIG.ACTIVE_HOURS_END;
   }
 
   setInterval(async () => {
-    if (!inActiveHours()) return;
+    if (!inActiveHours() || !await hasCookies()) return;
     try {
-      await getSchedule(0);
-      await getSchedule(1);
+      const result = await refreshSchedules();
+      if (result.auth) await requireLogin("Background session expired");
       win?.webContents.send("reload");
     } catch (err) {
       const errMsg = err?.message || String(err);
@@ -1045,9 +1049,10 @@ app.whenReady().then(async () => {
   }, CONFIG.AUTO_REFRESH_INTERVAL_MS);
 
   setInterval(async () => {
-    if (!inActiveHours()) return;
+    if (!inActiveHours() || !await hasCookies()) return;
     try {
-      await getSchedule(1);
+      const result = await getSchedule(1);
+      if (result?.authError) await requireLogin("Background session expired");
       win?.webContents.send("reload");
     } catch (err) {
       const errMsg = err?.message || String(err);
@@ -1071,17 +1076,32 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on("window-all-closed", (e) => e.preventDefault());
+app.on("window-all-closed", () => {});
 
-app.on("before-quit", async () => {
-  try {
-    stopCookieRefreshService();
+let shutdownComplete = false;
+let shutdownPromise = null;
+let quitCleanupStarted = false;
+function prepareShutdown() {
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
+    stopCookieRefreshService(); stopClassReminderService();
+    invalidateSession(); updateCancellation?.cancel(); updaterScheduler?.stop();
     const ses = session.fromPartition(getCookiePartition());
     await ses.flushStorageData();
-    closeDatabase();
-  } catch (err) {
-    logger.warn(`[before-quit] cleanup failed: ${err?.message}`);
-  }
+    await closeGpaWorker(); await closeDatabase(); await flushJsonWrites(); await logger.flush?.();
+  })();
+  return shutdownPromise;
+}
+app.on("before-quit", event => {
+  app.isQuitting = true;
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (quitCleanupStarted) return;
+  quitCleanupStarted = true;
+  let timer;
+  Promise.race([prepareShutdown(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Shutdown cleanup timed out")), 8000); })])
+    .catch(error => logger.error("[before-quit] cleanup failed", { error: error.message }))
+    .finally(() => { clearTimeout(timer); shutdownComplete = true; app.quit(); });
 });
 
 app.on("second-instance", () => {
@@ -1094,10 +1114,26 @@ app.on("second-instance", () => {
 
 process.on("uncaughtException", (error) => {
   logger.error(`[UNCAUGHT EXCEPTION] ${error.message}`, { stack: error.stack });
-  console.error("Uncaught Exception:", error);
+
 });
 
 process.on("unhandledRejection", (reason, promise) => {
   logger.error(`[UNHANDLED REJECTION] ${reason}`, { promise: String(promise) });
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+
 });
+
+let updaterScheduler;
+function startBackgroundServices() {
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  updaterScheduler = createUpdateScheduler({ enabled: () => !isDev && store.get("autoUpdate", true), check: async () => {
+    const result = await checkForUpdatesSafe();
+    if (result?.update) win?.webContents.send("toast-update", "New update available (v" + result.version + "). Click to update.");
+  }, onError: error => logger.warn("[update] check failed", { error: error.message }) });
+  updaterScheduler.start();
+}
+async function refreshSchedules() {
+  const first = await getSchedule(0);
+  const second = await getSchedule(1);
+  return { auth: !!(first?.authError || second?.authError), stale: !!(first?.stale || second?.stale) };
+}

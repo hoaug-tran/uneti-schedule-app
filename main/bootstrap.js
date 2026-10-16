@@ -3,7 +3,9 @@ import path from "path";
 
 app.setPath(
   "userData",
-  path.join(app.getPath("appData"), "uneti-schedule-widget")
+  !app.isPackaged && process.env.NODE_ENV === "test" && process.env.UNETI_TEST_USER_DATA
+    ? path.resolve(process.env.UNETI_TEST_USER_DATA)
+    : path.join(app.getPath("appData"), "uneti-schedule-widget")
 );
 
 export { app };
