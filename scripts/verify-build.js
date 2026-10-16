@@ -1,0 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { load } from "js-yaml";
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const info = load(fs.readFileSync("dist/latest.yml", "utf8"));
+if (info.version !== pkg.version || !Array.isArray(info.files) || info.files.length !== 1) throw new Error("Invalid update metadata version/files");
+const expected = `uneti-schedule-widget-${pkg.version}-setup.exe`;
+if (info.path !== expected || info.files[0].url !== expected) throw new Error("Unexpected update artifact name");
+const file = fs.readFileSync(path.join("dist", expected));
+const hash = crypto.createHash("sha512").update(file).digest("base64");
+if (hash !== info.files[0].sha512 || hash !== info.sha512 || file.length !== info.files[0].size) throw new Error("Update artifact integrity mismatch");
+if (fs.statSync(path.join("dist", `${expected}.blockmap`)).size < 1) throw new Error("Missing blockmap");
+console.log(`Verified installer, blockmap and metadata for v${pkg.version}`);

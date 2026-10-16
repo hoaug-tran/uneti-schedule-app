@@ -2,10 +2,15 @@ name: Build & Release UNETI Schedule Widget
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "dev"]
+  pull_request:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -13,40 +18,54 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Run regression tests
+        run: npm test
+
+      - name: Audit dependencies
+        run: npm audit
 
       - name: Build app (electron-builder)
         run: npm run build -- --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: uneti-schedule-widget
           path: dist/
+          if-no-files-found: error
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Read version from package.json
         id: get_version
@@ -56,28 +75,44 @@ jobs:
           echo "Using version: $VERSION"
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: uneti-schedule-widget
           path: ./dist
 
+      - name: Install artifact verifier dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Verify downloaded installer and update metadata
+        run: node scripts/verify-build.js
+
       - name: Find installer and metadata
         id: find_files
         run: |
-          EXE=$(ls dist/*.exe | head -n 1)
-          YAML=$(ls dist/latest.yml)
+          EXE="dist/uneti-schedule-widget-${PKG_VERSION}-setup.exe"
+          YAML="dist/latest.yml"
+          test -s "$EXE"
+          test -s "$EXE.blockmap"
+          test -s "$YAML"
+          test -s dist/release-notes.md
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; import { extractReleaseNotes } from "./scripts/release-notes.js"; const expected = extractReleaseNotes(readFileSync("CHANGELOG.md", "utf8"), process.env.PKG_VERSION); if (readFileSync("dist/release-notes.md", "utf8") !== expected) throw new Error("Artifact release notes do not match this version");'
           echo "INSTALLER=$EXE" >> $GITHUB_ENV
           echo "YML=$YAML" >> $GITHUB_ENV
           echo "Found installer: $EXE"
           echo "Found update metadata: $YAML"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: v${{ env.PKG_VERSION }}
           name: "Widget lịch học UNETI v${{ env.PKG_VERSION }}"
+          target_commitish: ${{ github.sha }}
+          body_path: dist/release-notes.md
+          generate_release_notes: false
+          fail_on_unmatched_files: true
           files: |
             ${{ env.INSTALLER }}
+            ${{ env.INSTALLER }}.blockmap
             ${{ env.YML }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
