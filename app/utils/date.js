@@ -1,4 +1,9 @@
-export function startOfWeek(date = new Date()) {
+export function vietnamNow(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  const p = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second));
+}
+export function startOfWeek(date = vietnamNow()) {
   const d = new Date(date);
   const day = d.getDay() || 7;
   if (day !== 1) d.setDate(d.getDate() - (day - 1));
@@ -20,7 +25,7 @@ export function parseYMDLocal(s) {
   return new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
 }
 
-export function weekKey(date = new Date()) {
+export function weekKey(date = vietnamNow()) {
   return formatYMDLocal(startOfWeek(date));
 }
 

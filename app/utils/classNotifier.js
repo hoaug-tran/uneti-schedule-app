@@ -1,16 +1,16 @@
 import { Notification } from "electron";
-import { formatYMDLocal, periodsTime } from "./date.js";
+import { formatYMDLocal, periodsTime, vietnamNow } from "./date.js";
 import { logger } from "./logger.js";
 
 const notifiedItems = new Set();
 let reminderInterval = null;
 let lastRecordedDay = "";
+let generation = 0;
 
 function parseClassTime(dayStr, timeStr) {
   try {
-    const [y, m, d] = dayStr.split("-").map(Number);
-    const [h, min] = timeStr.split(":").map(Number);
-    return new Date(y, m - 1, d, h, min, 0, 0);
+    const value = new Date(dayStr + "T" + timeStr + ":00+07:00");
+    return Number.isFinite(value.getTime()) ? value : null;
   } catch {
     return null;
   }
@@ -31,6 +31,7 @@ function pruneOldNotifiedItems(todayStr) {
 
 export function startClassReminderService({ getTodaySchedule, onNotificationClick, iconPath }) {
   stopClassReminderService();
+  const ownGeneration = generation;
 
   const check = async () => {
     try {
@@ -38,10 +39,11 @@ export function startClassReminderService({ getTodaySchedule, onNotificationClic
       if (typeof getTodaySchedule !== "function") return;
 
       const scheduleItems = await getTodaySchedule();
+      if (ownGeneration !== generation) return;
       if (!Array.isArray(scheduleItems) || scheduleItems.length === 0) return;
 
       const now = new Date();
-      const todayStr = formatYMDLocal(now);
+      const todayStr = formatYMDLocal(vietnamNow(now));
       pruneOldNotifiedItems(todayStr);
 
       const todayItems = scheduleItems.filter((it) => it.day === todayStr);
@@ -83,7 +85,7 @@ export function startClassReminderService({ getTodaySchedule, onNotificationClic
           }
 
           notif.show();
-          logger.info(`[classNotifier] Sent notification for: ${itemKey}`);
+          logger.info("[classNotifier] Sent class reminder");
         }
       }
     } catch (err) {
@@ -96,6 +98,8 @@ export function startClassReminderService({ getTodaySchedule, onNotificationClic
 }
 
 export function stopClassReminderService() {
+  generation++;
+  notifiedItems.clear();
   if (reminderInterval) {
     clearInterval(reminderInterval);
     reminderInterval = null;
