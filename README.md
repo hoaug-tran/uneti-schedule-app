@@ -9,11 +9,11 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 
 ## Giới thiệu
 
-Ứng dùng Widget này mình viết để theo dõi lịch học UNETI cho tiện. Thay vì phải mở trình duyệt, đăng nhập vào trang lịch của trường rồi thao tác nhiều bước mỗi lần muốn xem - và đôi khi website còn không truy cập được - thì giờ chỉ cần click vào tray icon là xong.
+Widget này mình viết để theo dõi lịch học UNETI cho tiện. Thay vì phải mở trình duyệt, đăng nhập vào trang lịch của trường rồi thao tác nhiều bước mỗi lần muốn xem - và đôi khi website còn không truy cập được - thì giờ chỉ cần click vào tray icon là xong.
 
 Ứng dụng hỗ trợ xem offline, nên ngay cả khi server trường gặp sự cố hoặc mất kết nối internet, bạn vẫn có thể xem lịch đã lưu.
 
-Ứng dụng tự động làm mới lịch mỗi giờ để đảm bảo dữ lịch học, lịch thi luôn được cập nhật. Ngoài ra, bạn cũng có thể bấm Làm mới thủ công bất cứ lúc nào khi cần.
+Ứng dụng tự động làm mới tuần hiện tại mỗi giờ và tuần sau mỗi 6 giờ khi đang chạy, có kết nối và phiên đăng nhập còn hiệu lực. Ngoài ra, bạn cũng có thể bấm Làm mới thủ công bất cứ lúc nào khi cần.
 
 ## Một số hình ảnh của Widget
 
@@ -47,7 +47,7 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 - Hiển thị lịch học theo tuần
 - Tự động làm mới: tuần hiện tại mỗi 1 giờ, tuần sau mỗi 6 giờ
 - Hoạt động offline (dùng lịch đã lưu)
-- Tính toán & Lập kế hoạch GPA: Tự động load bảng điểm, tính GPA hệ 4 & hệ 10 chuẩn xác. Hỗ trợ mô phỏng điểm số 2 chiều (nhập điểm số dự kiến hoặc chọn điểm chữ mục tiêu A/B+/B/C/D), thuật toán thông minh tự động gợi ý số môn ít nhất cần cải thiện để đạt mục tiêu (Xuất sắc, Giỏi, Khá). Tự động nhận diện kỳ đang học và loại trừ các môn không tính GPA (Thể chất, Quốc phòng...).
+- Xem bảng điểm, tính GPA hệ 4 và hệ 10, mô phỏng điểm dự kiến và lập kế hoạch cải thiện GPA. Các môn không tính GPA được phân loại riêng.
 - Dark/Light theme
 - Tiếng Việt/English
 - Tray icon để truy cập nhanh
@@ -58,7 +58,6 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 ### Yêu cầu
 
 - Windows 10/11 (64-bit)
-- Khoảng 150MB ổ cứng
 
 ### Cách cài
 
@@ -78,37 +77,8 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 >
 > Ứng dụng hoạt động bằng cách truy cập cổng thông tin sinh viên public dưới danh nghĩa người dùng đã đăng nhập để tải dữ liệu lịch. Người dùng tự chịu trách nhiệm khi sử dụng. Tác giả không chịu trách nhiệm về bất kỳ lỗi hiển thị, lỡ lịch học/thi hay các vấn đề khác phát sinh từ việc sử dụng phần mềm.
 
-> [!CAUTION]
-> **Lưu ý về cảnh báo Virus / Windows SmartScreen:**
-> Ứng dụng này KHÔNG chứa virus, malware, spyware hay bất kỳ mã độc nào. Do mình không có kinh phí (khoảng 5-7 triệu VNĐ/năm) để duy trì chứng chỉ xác thực từ Microsoft, nên Windows sẽ tự động gắn cờ đây là "Phần mềm không xác định" (Unknown Publisher).
->
-> **Ứng dụng sạch 100% và mã nguồn mở.** Bạn có thể tự mình kiểm tra code ngay tại repository này để yên tâm.
->
-> **Để mở ứng dụng:**
->
-> 1. Bấm vào **More info** (Thêm thông tin).
-> 2. Chọn **Run anyway** (Vẫn chạy).
->
-> _Lưu ý quan trọng:_
->
-> - Nếu trình diệt virus (Windows Defender,...) tự động xóa file khi vừa tải về, bạn hãy tạm thời tắt diệt virus hoặc thêm file vào danh sách loại trừ (Exclusion list).
-
-### Kết quả quét VirusTotal
-
-<p align="center">
-  <img src="assets/img/virustotal_check.png" width="100%" />
-</p>
-
-<p align="center">
-  Kết quả quét VirusTotal tại thời điểm phát hành
-  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.9.0">
-    v1.9.0
-  </a>
-  – 0/62 engine phát hiện mã độc<br/>
-  <a href="https://www.virustotal.com/gui/file/e57b5abf15654cea6dc2179dcf7e0cbe02eaf8f8febb50c9df2d8148c298091a?nocache=1" target="_blank">
-    Xem chi tiết trên VirusTotal
-  </a>
-</p>
+> [!NOTE]
+> Bộ cài hiện chưa có chữ ký số nên Windows có thể hiển thị tên nhà phát hành là "Unknown Publisher". Chỉ tải từ trang Releases của project và kiểm tra đúng phiên bản trước khi cài.
 
 ## Sử dụng
 
@@ -117,7 +87,7 @@ UNETI Schedule Widget là một ứng dụng desktop giúp sinh viên UNETI xem 
 Mở ứng dụng lần đầu sẽ hiện cửa sổ đăng nhập. Nhập tài khoản / mật khẩu trang sinh viên UNETI như bình thường.
 
 > [!NOTE]
-> Ứng dụng chỉ lưu cookie session được mã hóa tại máy của bạn, không lưu mật khẩu hay gửi đi đâu cả.
+> Bạn nhập mật khẩu trên trang đăng nhập UNETI. Ứng dụng lưu cookie phiên bằng Windows Credential Manager hoặc cơ chế mã hóa của hệ điều hành để truy cập dữ liệu theo tài khoản của bạn.
 
 ### Xem lịch
 
@@ -139,7 +109,7 @@ Click nút "Làm mới" để tải lịch mới nhất từ server. Nên làm m
 > [!TIP]
 > Ứng dụng tự động làm mới mỗi giờ, nhưng bạn vẫn nên bấm "Làm mới" thủ công trước ngày thi để chắc chắn.
 
-### Tray Menu
+### Menu ở khay hệ thống
 
 Chuột phải vào tray icon để mở menu:
 
@@ -163,26 +133,15 @@ A: Không. Ứng dụng chỉ lưu cookie session được mã hóa tại máy c
 A: Cookie của trường (UNETI) với mỗi tài khoản của sinh viên có thời hạn. Khi hết hạn thì phải đăng nhập lại.
 
 **Q: Lịch có chính xác không?**  
-A: Có. Ứng dụng lấy lịch trực tiếp từ server UNETI và tự động làm mới mỗi giờ.
+A: Lịch được lấy từ UNETI. Khi mất mạng hoặc không tải được dữ liệu mới, lịch đã lưu có thể chưa phản ánh thay đổi của trường; hãy đối chiếu cổng sinh viên khi cần.
 
 **Q: Ứng dụng có hoạt động offline không?**  
-A: Có. Khi mất mạng, ứng dụng sẽ dùng lịch đã lưu. Khi có mạng lại sẽ tự động cập nhật.
-
-**Q: Tại sao khi cài ứng dụng nặng ~300MB?**  
-A: Vì đây là ứng dụng Electron nên bộ cài phải chứa:
-
-- Electron runtime (~200MB+)
-- Native modules (keytar, better-sqlite3…)
-- Tài nguyên giao diện
-- Bộ cài NSIS và metadata
-
-> Code JavaScript của ứng dụng thực tế chỉ ~5–10MB.  
-> Dung lượng lớn là đặc điểm chung của ứng dụng Electron trên Windows, không phải riêng ứng dụng này.
+A: Có. Ứng dụng có thể dùng lịch đã lưu trong tối đa 30 ngày; lịch quá 6 giờ sẽ có cảnh báo. Khi có mạng và phiên đăng nhập còn hiệu lực, ứng dụng sẽ thử tải dữ liệu mới.
 
 **Q: Dữ liệu lưu ở đâu?**  
-A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows Credential Manager.
+A: `%APPDATA%/uneti-schedule-widget/`. Cookie được lưu qua Windows Credential Manager hoặc mã hóa bằng cơ chế của hệ điều hành.
 
-## Troubleshooting
+## Xử lý sự cố
 
 ### Không đăng nhập được
 
@@ -191,7 +150,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 **Thử các cách sau**:
 
 1. Kiểm tra kết nối internet
-2. Tắt firewall/antivirus tạm thời
+2. Kiểm tra xem cổng sinh viên UNETI có đăng nhập được trên trình duyệt không
 3. Tắt ứng dụng đi và mở lại
 4. Chuột phải tray → Đăng xuất → Thử lại
 
@@ -203,7 +162,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 
 1. Click nút "Làm mới"
 2. Nếu vẫn sai: Chuột phải tray → Xoá dữ liệu lịch → Thử lại
-3. Kiểm tra log: Chuột phải tray → Xem file log (xem tên các buổi học có xuất hiện hay không)
+3. Kiểm tra log: Chuột phải biểu tượng khay hệ thống → Xem nhật ký
 
 ### Chuyển tuần bị văng ra đăng nhập
 
@@ -233,7 +192,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 - Kết nối mạng không ổn định
 - Quyền ghi file bị chặn bởi antivirus / Windows Defender
 - File update bị xóa trong quá trình tải
-- Do thằng dev làm hỏng... (khả năng cao)
+- Lỗi trong ứng dụng hoặc bộ cài; xem nhật ký để xác định nguyên nhân
 
 **Giải pháp**:
 
@@ -243,8 +202,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 4. Ghi đè lên bản cũ (không cần gỡ cài đặt trước)
 
 > [!NOTE]
-> Việc cài đặt phiên bản mới sẽ **không làm mất dữ liệu lịch hoặc thông tin đăng nhập**.  
-> Nếu do dev thật, mình rất xin lỗi các bạn. Mình test kém quá.
+> Sau khi nâng cấp, ứng dụng có thể yêu cầu đăng nhập lại nếu phiên đã hết hạn hoặc định dạng dữ liệu lưu thay đổi.
 
 ### Ứng dụng không tự động khởi động
 
@@ -260,34 +218,38 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookie được mã hóa bằng Windows C
 > [!WARNING]
 > Nếu vẫn gặp lỗi, vui lòng mở [issue](https://github.com/hoaug-tran/uneti-schedule-app/issues) trên GitHub hoặc liên hệ qua email.
 
-## Development
+## Phát triển
 
 ### Công nghệ sử dụng
 
-- Electron 38.x
+- Electron 44.x
 - JavaScript (ES Modules)
-- better-sqlite3 (database)
-- Keytar (secure cookie storage)
+- JSON để lưu lịch và kết quả học tập
+- Keytar và Electron safeStorage để bảo vệ cookie
 - Lucide Icons & Vanilla CSS
 
-### Setup
+### Chạy từ source
 
 ```bash
 git clone https://github.com/hoaug-tran/uneti-schedule-app.git
 cd uneti-schedule-app
-pnpm install
-pnpm dev
+npm ci
+npm run dev
 ```
 
 ### Build
 
 ```bash
-pnpm build
+npm run build -- --publish never
 ```
 
-File build sẽ nằm trong folder `dist/`.
+Bộ cài nằm trong `dist/`. Chạy `npm run check` và `npm test` trước khi build.
 
-## License
+Nội dung GitHub Release được lấy tự động từ mục khớp version trong [CHANGELOG.md](CHANGELOG.md). Hướng dẫn thử máy chủ cập nhật: [TEST_UPDATE_SERVER.md](docs/TEST_UPDATE_SERVER.md).
+
+
+
+## Giấy phép
 
 MIT License - xem file [LICENSE](LICENSE).
 

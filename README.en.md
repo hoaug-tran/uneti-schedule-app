@@ -13,7 +13,7 @@ This app was created to make checking UNETI schedules faster and more convenient
 
 The application supports offline viewing, so even if the university server is down or your internet connection is unavailable, you can still access your previously saved schedules.
 
-The app automatically refreshes class and exam schedules every hour to keep the data up to date. Additionally, you can manually refresh the schedule at any time when needed.
+While running with a connection and a valid session, the app refreshes the current week every hour and the following week every six hours. Additionally, you can manually refresh the schedule at any time when needed.
 
 ## Screenshots
 
@@ -58,7 +58,6 @@ The app automatically refreshes class and exam schedules every hour to keep the 
 ### Requirements
 
 - Windows 10/11 (64-bit)
-- About 150MB disk space
 
 ### How to Install
 
@@ -78,34 +77,8 @@ The app automatically refreshes class and exam schedules every hour to keep the 
 >
 > The application functions by securely accessing the public student portal to retrieve schedule data for the authenticated user. Use this application at your own risk. The author(s) accept no responsibility for any errors, missed classes, or other issues resulting from the use of this software.
 
-> [!CAUTION]
-> **Regarding Virus/SmartScreen Warnings:**
-> This app is NOT a virus. Because I don't have the budget ($300 - $600/year) to purchase a Microsoft Digital Certificate, Windows SmartScreen will flag this as an "Unknown Publisher."
-> 
-> **The app is 100% safe and open-source.** You can verify the code yourself in this repository.
->
-> **To run the app:**
-> 1. Click on **More info**.
-> 2. Click **Run anyway**.
-> 
-> *Note: If your antivirus (Windows Defender, etc.) automatically deletes the file, you may need to temporarily disable it or add the app to the exclusion list.*
-
-### VirusTotal result
-
-<p align="center">
-  <img src="assets/img/virustotal_check.png" width="100%" />
-</p>
-
-<p align="center">
-  VirusTotal scan results at the time of release
-  <a href="https://github.com/hoaug-tran/uneti-schedule-app/releases/tag/v1.9.0">
-    v1.9.0
-  </a>
-  – 0/62 security engines detected malware.<br/>
-  <a href="https://www.virustotal.com/gui/file/e57b5abf15654cea6dc2179dcf7e0cbe02eaf8f8febb50c9df2d8148c298091a?nocache=1" target="_blank">
-    View the detailed VirusTotal report
-  </a>
-</p>
+> [!NOTE]
+> The current installer is unsigned, so Windows may display "Unknown Publisher". Download only from this project’s Releases page and check the version before installing.
 
 ## Usage
 
@@ -160,23 +133,13 @@ A: No. App only stores encrypted session cookies on your computer, not passwords
 A: UNETI cookies have expiration. When expired, you need to login again.
 
 **Q: Is the schedule accurate?**  
-A: Yes. App fetches schedule directly from UNETI server and auto-refreshes every hour.
+A: Schedules come from UNETI. Saved data may be outdated when a refresh fails or the app is offline; check the student portal when needed.
 
 **Q: Does the app work offline?**  
-A: Yes. When offline, app uses cached schedule. When online again, it auto-updates.
-
-**Q: Why is the installer around ~300MB?**  
-A: This application is built with Electron, so the installer needs to bundle:
-- The Electron runtime (~200MB+)
-- Native modules (such as keytar, better-sqlite3, etc.)
-- UI assets and resources
-- The NSIS installer and related metadata
-
-> The actual JavaScript code of the app is only about ~5–10MB.  
-> The large size is a common characteristic of Electron applications on Windows, not specific to this app.
+A: Yes. Saved schedules remain available for up to 30 days, with a warning after six hours. Refresh resumes when the app has a connection and a valid session.
 
 **Q: Where is data stored?**  
-A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Credential Manager.
+A: `%APPDATA%/uneti-schedule-widget/`. Cookies use Windows Credential Manager or operating-system encryption.
 
 ## Troubleshooting
 
@@ -186,7 +149,7 @@ A: `%APPDATA%/uneti-schedule-widget/`. Cookies are encrypted using Windows Crede
 
 **Try these**:
 1. Check internet connection
-2. Temporarily disable firewall/antivirus
+2. Check whether you can sign in to the UNETI student portal in your browser
 3. Restart app
 4. Right-click tray → Logout → Try again
 
@@ -226,7 +189,7 @@ The application does not update to a newer version automatically, or the update 
 - Unstable or interrupted network connection
 - File write permissions blocked by antivirus software or Windows Defender
 - Update files being removed during download
-- An unexpected issue introduced by the developer (yes, this can happen)
+- An application or installer error; check the logs for details
 
 **Solution**:
 1. Fully exit the application
@@ -235,8 +198,7 @@ The application does not update to a newer version automatically, or the update 
 4. Install it over the existing version (no need to uninstall first)
 
 > [!NOTE]
-> Installing a new version will **not remove your saved schedule data or login information**.  
-> If the issue was caused by a bug on the developer side, I sincerely apologize and will fix it as soon as possible.
+> You may need to sign in again after upgrading if the session has expired or the stored data format has changed.
 
 ### App Doesn't Auto-Start
 
@@ -255,10 +217,10 @@ The application does not update to a newer version automatically, or the update 
 
 ### Tech Stack
 
-- Electron 38.x
+- Electron 44.x
 - JavaScript (ES Modules)
-- better-sqlite3 (database)
-- Keytar (secure cookie storage)
+- JSON for schedule and academic-result storage
+- Keytar and Electron safeStorage for cookie protection
 - Lucide Icons & Vanilla CSS
 
 ### Setup
@@ -266,17 +228,21 @@ The application does not update to a newer version automatically, or the update 
 ```bash
 git clone https://github.com/hoaug-tran/uneti-schedule-app.git
 cd uneti-schedule-app
-pnpm install
-pnpm dev
+npm ci
+npm run dev
 ```
 
 ### Build
 
 ```bash
-pnpm build
+npm run build -- --publish never
 ```
 
-Build files will be in `dist/` folder.
+Build files are written to `dist/`. Run `npm run check` and `npm test` before building.
+
+GitHub Release descriptions are generated from the matching version in [CHANGELOG.md](CHANGELOG.md). See [TEST_UPDATE_SERVER.md](docs/TEST_UPDATE_SERVER.md) for local update-server instructions (Vietnamese).
+
+
 
 ## License
 
