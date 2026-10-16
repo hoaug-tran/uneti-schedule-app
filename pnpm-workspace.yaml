@@ -1,3 +1,7 @@
 allowBuilds:
   electron: true
+  electron-winstaller: true
   keytar: true
+minimumReleaseAgeExclude:
+  - argparse@3.0.3
+  - js-yaml@5.5.0

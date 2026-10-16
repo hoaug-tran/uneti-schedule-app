@@ -32,6 +32,6 @@ Thumbs.db
 
 *.log
 logs/
+/tmp/
 
 .env
-TEST_UPDATE_SERVER.md

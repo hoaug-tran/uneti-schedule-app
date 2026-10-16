@@ -1,31 +1,33 @@
 {
   "name": "uneti-schedule-widget",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "Widget lịch học UNETI",
   "author": "Trần Kính Hoàng (hoaug)",
   "type": "module",
   "main": "main/main.js",
   "scripts": {
     "fetch": "node app/fetcher/getSchedule.js",
-    "dev": "cross-env NODE_ENV=development electron main/main.js",
+    "dev": "cross-env NODE_ENV=development electron .",
+    "test": "node --experimental-vm-modules --test test/*.test.js",
+    "check": "node scripts/check-syntax.js",
+    "release:notes": "node scripts/release-notes.js",
+    "prebuild": "npm run release:notes",
     "build": "electron-builder",
-    "postbuild": "node fix-latest-yml.cjs",
+    "postbuild": "node scripts/verify-build.js && npm run release:notes",
     "update-server": "http-server ./dist -p 8080 --cors"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
-    "depcheck": "^1.4.7",
-    "electron": "^38.1.2",
-    "electron-builder": "^24.13.3",
-    "http-server": "^14.1.1"
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3",
+    "http-server": "^14.1.1",
+    "js-yaml": "^5.5.0"
   },
   "dependencies": {
-    "auto-launch": "^5.0.6",
     "dotenv": "^17.2.3",
     "electron-store": "^11.0.2",
-    "electron-updater": "^6.6.2",
-    "keytar": "^7.9.0",
-    "lucide": "^0.562.0"
+    "electron-updater": "6.8.9",
+    "keytar": "^7.9.0"
   },
   "build": {
     "appId": "com.hoaug.uneti.schedule",
@@ -55,7 +57,6 @@
     "win": {
       "target": "nsis",
       "icon": "app/assets/uneti.ico",
-      "publisherName": "Trần Kính Hoàng (hoaug)",
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
@@ -73,5 +74,11 @@
       "menuCategory": false,
       "displayLanguageSelector": false
     }
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "overrides": {
+    "global-agent": "^4.1.3"
   }
 }
